@@ -92,26 +92,33 @@ export function useAuth() {
 
   const ensureUserProfile = async (authUser) => {
     try {
+      const displayName =
+        authUser.user_metadata?.display_name ?? authUser.email?.split('@')[0] ?? '名無し';
+      const icon = authUser.user_metadata?.icon ?? DEFAULT_ICON;
+
       const { data: profile } = await supabase
         .from('users')
         .select('id')
         .eq('id', authUser.id)
         .maybeSingle();
 
-      if (!profile) {
-        const displayName =
-          authUser.user_metadata?.display_name ?? authUser.email?.split('@')[0] ?? '名無し';
-        const icon = authUser.user_metadata?.icon ?? DEFAULT_ICON;
-
-        const { error } = await supabase.from('users').insert({
-          id: authUser.id,
-          email: authUser.email,
-          display_name: displayName,
-          icon
-        });
-
-        if (error) throw error;
+      if (profile) {
+        return;
       }
+
+      const { error } = await supabase
+        .from('users')
+        .upsert(
+          {
+            id: authUser.id,
+            email: authUser.email,
+            display_name: displayName,
+            icon
+          },
+          { onConflict: 'id' }
+        );
+
+      if (error) throw error;
     } catch (error) {
       console.error('プロフィール作成に失敗しました:', error);
     }
