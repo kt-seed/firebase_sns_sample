@@ -17,7 +17,8 @@ const remainingChars = computed(() => MAX_CHAR_COUNT - text.value.length);
 const isTooLong = computed(() => remainingChars.value < 0);
 const isTextEmpty = computed(() => text.value.trim().length === 0);
 const isAuthenticated = computed(() => authStore.isAuthenticated);
-const currentUserId = computed(() => authStore.user.value?.id ?? null);
+// Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
+const currentUserId = computed(() => authStore.user?.id ?? null);
 const isSubmitDisabled = computed(
   () => submitting.value || !isAuthenticated.value || isTextEmpty.value || isTooLong.value
 );

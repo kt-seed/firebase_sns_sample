@@ -10,7 +10,8 @@ const authStore = useAuthStore();
 const toast = useToast();
 
 const displayName = computed(() => {
-  const user = authStore.user.value;
+  // Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
+  const user = authStore.user;
   if (!user) {
     return 'ゲスト';
   }
@@ -18,7 +19,8 @@ const displayName = computed(() => {
 });
 
 const profileIcon = computed(() => {
-  const user = authStore.user.value;
+  // Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
+  const user = authStore.user;
   return getIconEmoji(user?.user_metadata?.icon);
 });
 

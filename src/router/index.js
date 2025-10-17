@@ -34,8 +34,25 @@ const router = createRouter({
 });
 
 // 認証ガード: 認証が必要なページへのアクセスを制御
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
+
+  // 認証初期化が完了するまで待つ
+  if (authStore.loading) {
+    // loadingがfalseになるまで待機
+    const checkLoading = () => {
+      return new Promise((resolve) => {
+        const interval = setInterval(() => {
+          if (!authStore.loading) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 50);
+      });
+    };
+    await checkLoading();
+  }
+
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
 
   if (requiresAuth && !authStore.isAuthenticated) {

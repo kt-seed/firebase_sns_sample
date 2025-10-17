@@ -27,7 +27,8 @@ const refreshRealtimeSubscription = () => {
     unsubscribeRealtime = null;
   }
 
-  const userId = authStore.user.value?.id ?? null;
+  // Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
+  const userId = authStore.user?.id ?? null;
   unsubscribeRealtime = postsStore.subscribeToTimeline({
     filter: activeTab.value,
     userId
@@ -42,7 +43,8 @@ const loadTimeline = async () => {
   }
 
   isInitialLoading.value = true;
-  const userId = authStore.user.value?.id ?? null;
+  // Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
+  const userId = authStore.user?.id ?? null;
   const { error } = await postsStore.fetchTimeline({
     filter: activeTab.value,
     userId
@@ -90,8 +92,9 @@ const setupObserver = () => {
   }
 };
 
+// Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
 watch(
-  [activeTab, () => authStore.user.value?.id],
+  [activeTab, () => authStore.user?.id],
   () => {
     loadTimeline();
   },
@@ -122,7 +125,8 @@ const emptyStateMessage = () => {
   return '投稿がまだありません。最初の投稿を作成してみましょう。';
 };
 
-const isOwnPost = (post) => authStore.user.value?.id === post.user_id;
+// Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
+const isOwnPost = (post) => authStore.user?.id === post.user_id;
 
 const handleDelete = async (postId) => {
   const { error } = await postsStore.deletePost(postId);
