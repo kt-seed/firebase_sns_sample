@@ -17,6 +17,10 @@ const props = defineProps({
   isOwnPost: {
     type: Boolean,
     default: false
+  },
+  repostUser: {
+    type: Object,
+    default: null
   }
 });
 
@@ -33,6 +37,7 @@ const createdAt = computed(() => props.post.created_at);
 
 const currentUserId = computed(() => authStore.user?.id ?? null);
 const isAuthenticated = computed(() => !!currentUserId.value);
+const repostUserName = computed(() => props.repostUser?.display_name ?? '');
 
 const likeCount = ref(props.post.likes_count ?? 0);
 const repostCount = ref(props.post.reposts_count ?? 0);
@@ -57,6 +62,16 @@ watch(
       repostCount.value = value;
     }
   }
+);
+
+watch(
+  () => props.repostUser,
+  () => {
+    if (props.repostUser?.id && props.repostUser.id === currentUserId.value) {
+      reposted.value = true;
+    }
+  },
+  { immediate: true }
 );
 
 const hydrateState = async () => {
@@ -177,6 +192,12 @@ const handleDelete = () => {
       </div>
 
       <div class="flex-1">
+        <p
+          v-if="repostUser"
+          class="mb-1 text-xs font-semibold text-emerald-600"
+        >
+          {{ repostUserName }} さんがリポスト
+        </p>
         <header class="flex items-center gap-2">
           <h3 class="text-base font-semibold text-slate-900">{{ authorName }}</h3>
           <time

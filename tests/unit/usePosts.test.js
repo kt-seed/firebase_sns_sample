@@ -28,36 +28,64 @@ describe('usePosts', () => {
     fromMock.mockReset();
   });
 
+  const buildPostsBuilder = (options = {}) => {
+    const {
+      data = [],
+      limitError = null,
+      insertImpl = vi.fn(() => ({ select: vi.fn(() => ({ single: vi.fn() })) })),
+      deleteImpl = vi.fn(() => ({ eq: vi.fn() }))
+    } = options;
+
+    return {
+      select: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data, error: limitError }),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis(),
+      insert: insertImpl,
+      delete: deleteImpl
+    };
+  };
+
+  const buildRepostsBuilder = (options = {}) => {
+    const { data = [], limitError = null } = options;
+    return {
+      select: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data, error: limitError }),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis()
+    };
+  };
+
   it('タイムラインを取得し posts 状態を更新する', async () => {
     const postsData = [
       {
         id: 'post-1',
         user_id: 'user-1',
         text: 'こんにちは',
-        created_at: '2024-01-01T00:00:00.000Z'
-      },
-      {
-        id: 'post-2',
-        user_id: 'user-2',
-        text: 'こんばんは',
-        created_at: '2024-01-02T00:00:00.000Z'
+        created_at: '2024-01-01T00:00:00.000Z',
+        likes_count: 1,
+        reposts_count: 0,
+        users: {
+          id: 'user-1',
+          display_name: 'User 1',
+          icon: 'icon-cat'
+        }
       }
     ];
 
-    const postsBuilder = {
-      select: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: postsData, error: null }),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      lt: vi.fn().mockReturnThis(),
-      insert: vi.fn(),
-      delete: vi.fn()
-    };
+    const postsBuilder = buildPostsBuilder({ data: postsData });
+    const repostsBuilder = buildRepostsBuilder();
 
     fromMock.mockImplementation((table) => {
       if (table === 'posts') {
         return postsBuilder;
+      }
+      if (table === 'reposts') {
+        return repostsBuilder;
       }
       if (table === 'follows') {
         return {
@@ -74,8 +102,9 @@ describe('usePosts', () => {
     const { error } = await fetchTimeline();
 
     expect(error).toBeNull();
-    expect(posts.value).toHaveLength(2);
-    expect(posts.value[0].id).toBe('post-1');
+    expect(posts.value).toHaveLength(1);
+    expect(posts.value[0].timeline_id).toBe('post-post-1');
+    expect(posts.value[0].post.text).toBe('こんにちは');
     expect(hasMore.value).toBe(false);
   });
 
@@ -85,33 +114,34 @@ describe('usePosts', () => {
         id: 'post-self',
         user_id: 'user-1',
         text: '自分の投稿',
-        created_at: '2024-01-05T00:00:00.000Z'
+        created_at: '2024-01-05T00:00:00.000Z',
+        likes_count: 0,
+        reposts_count: 0,
+        users: {
+          id: 'user-1',
+          display_name: 'User 1',
+          icon: 'icon-cat'
+        }
       }
     ];
 
-    const postsBuilder = {
-      select: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: postsData, error: null }),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      lt: vi.fn().mockReturnThis(),
-      insert: vi.fn(),
-      delete: vi.fn()
-    };
+    const postsBuilder = buildPostsBuilder({ data: postsData });
+    const repostsBuilder = buildRepostsBuilder();
 
     const followsEqMock = vi.fn().mockResolvedValue({ data: [], error: null });
-    const followsSelectMock = vi.fn(() => ({
-      eq: followsEqMock
-    }));
 
     fromMock.mockImplementation((table) => {
       if (table === 'posts') {
         return postsBuilder;
       }
+      if (table === 'reposts') {
+        return repostsBuilder;
+      }
       if (table === 'follows') {
         return {
-          select: followsSelectMock
+          select: vi.fn(() => ({
+            eq: followsEqMock
+          }))
         };
       }
       return {};
@@ -123,7 +153,7 @@ describe('usePosts', () => {
 
     expect(error).toBeNull();
     expect(posts.value).toHaveLength(1);
-    expect(posts.value[0].id).toBe('post-self');
+    expect(posts.value[0].post.id).toBe('post-self');
     expect(followsEqMock).toHaveBeenCalledWith('follower_id', 'user-1');
     expect(postsBuilder.in).toHaveBeenCalledWith('user_id', ['user-1']);
     expect(hasMore.value).toBe(false);
@@ -134,7 +164,14 @@ describe('usePosts', () => {
       id: 'post-10',
       user_id: 'user-1',
       text: 'テスト投稿',
-      created_at: '2024-01-03T00:00:00.000Z'
+      created_at: '2024-01-03T00:00:00.000Z',
+      likes_count: 0,
+      reposts_count: 0,
+      users: {
+        id: 'user-1',
+        display_name: 'User 1',
+        icon: 'icon-cat'
+      }
     };
 
     const singleMock = vi.fn().mockResolvedValue({
@@ -148,20 +185,15 @@ describe('usePosts', () => {
       select: selectAfterInsertMock
     }));
 
-    const postsBuilder = {
-      select: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      lt: vi.fn().mockReturnThis(),
-      insert: insertMock,
-      delete: vi.fn()
-    };
+    const postsBuilder = buildPostsBuilder({ data: [], insertImpl: insertMock });
+    const repostsBuilder = buildRepostsBuilder();
 
     fromMock.mockImplementation((table) => {
       if (table === 'posts') {
         return postsBuilder;
+      }
+      if (table === 'reposts') {
+        return repostsBuilder;
       }
       if (table === 'follows') {
         return {
@@ -179,7 +211,7 @@ describe('usePosts', () => {
 
     expect(error).toBeNull();
     expect(data).toEqual(insertedPost);
-    expect(posts.value[0]).toEqual(insertedPost);
+    expect(posts.value[0].post).toEqual(insertedPost);
     expect(insertMock).toHaveBeenCalledWith({
       user_id: 'user-1',
       text: 'テスト投稿'
@@ -201,20 +233,15 @@ describe('usePosts', () => {
       eq: deleteEqMock
     }));
 
-    const postsBuilder = {
-      select: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      lt: vi.fn().mockReturnThis(),
-      insert: vi.fn(),
-      delete: deleteMock
-    };
+    const postsBuilder = buildPostsBuilder({ deleteImpl: deleteMock });
+    const repostsBuilder = buildRepostsBuilder();
 
     fromMock.mockImplementation((table) => {
       if (table === 'posts') {
         return postsBuilder;
+      }
+      if (table === 'reposts') {
+        return repostsBuilder;
       }
       return {};
     });
@@ -222,15 +249,27 @@ describe('usePosts', () => {
     const usePosts = await importUsePosts();
     const { posts, deletePost } = usePosts();
     posts.value = [
-      { id: 'post-1', user_id: 'user-1', text: '残す' },
-      { id: 'post-2', user_id: 'user-1', text: '削除する' }
+      {
+        timeline_id: 'post-post-1',
+        type: 'post',
+        created_at: '2024-01-01T00:00:00.000Z',
+        post: { id: 'post-1', user_id: 'user-1', text: '残す' },
+        repost_user: null
+      },
+      {
+        timeline_id: 'post-post-2',
+        type: 'post',
+        created_at: '2024-01-02T00:00:00.000Z',
+        post: { id: 'post-2', user_id: 'user-1', text: '削除する' },
+        repost_user: null
+      }
     ];
 
     const { error } = await deletePost('post-2');
 
     expect(error).toBeNull();
     expect(posts.value).toHaveLength(1);
-    expect(posts.value[0].id).toBe('post-1');
+    expect(posts.value[0].post.id).toBe('post-1');
     expect(deleteEqMock).toHaveBeenCalledWith('id', 'post-2');
   });
 });
