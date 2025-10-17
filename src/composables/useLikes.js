@@ -73,9 +73,9 @@ export function useLikes() {
         .select('id')
         .eq('post_id', postId)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
+      if (fetchError) throw fetchError;
 
       return { liked: !!data, error: null };
     } catch (err) {

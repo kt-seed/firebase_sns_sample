@@ -61,9 +61,9 @@ export function useFollows() {
         .select('id')
         .eq('follower_id', followerId)
         .eq('following_id', followingId)
-        .single();
+        .maybeSingle();
 
-      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
+      if (fetchError) throw fetchError;
 
       return { following: !!data, error: null };
     } catch (err) {
