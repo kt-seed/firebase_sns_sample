@@ -1,21 +1,17 @@
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 
+// リポスト操作とカウンター更新を扱う composable
 export function useReposts() {
   const loading = ref(false);
   const error = ref(null);
 
-  /**
-   * リポストを作成
-   * @param {string} postId - 投稿ID
-   * @param {string} userId - ユーザーID
-   */
+  // リポストを作成し、投稿のリポスト数を増加させる
   const repostPost = async (postId, userId) => {
     loading.value = true;
     error.value = null;
 
     try {
-      // リポストを追加
       const { error: insertError } = await supabase.from('reposts').insert({
         post_id: postId,
         user_id: userId
@@ -23,7 +19,6 @@ export function useReposts() {
 
       if (insertError) throw insertError;
 
-      // 投稿のリポスト数を更新
       const { error: updateError } = await supabase.rpc('increment_reposts_count', {
         post_id: postId
       });
@@ -40,17 +35,12 @@ export function useReposts() {
     }
   };
 
-  /**
-   * リポストを削除
-   * @param {string} postId - 投稿ID
-   * @param {string} userId - ユーザーID
-   */
+  // リポストを取り消し、投稿のリポスト数を減少させる
   const unrepostPost = async (postId, userId) => {
     loading.value = true;
     error.value = null;
 
     try {
-      // リポストを削除
       const { error: deleteError } = await supabase
         .from('reposts')
         .delete()
@@ -59,7 +49,6 @@ export function useReposts() {
 
       if (deleteError) throw deleteError;
 
-      // 投稿のリポスト数を更新
       const { error: updateError } = await supabase.rpc('decrement_reposts_count', {
         post_id: postId
       });
@@ -76,11 +65,7 @@ export function useReposts() {
     }
   };
 
-  /**
-   * ユーザーが投稿をリポストしているか確認
-   * @param {string} postId - 投稿ID
-   * @param {string} userId - ユーザーID
-   */
+  // 指定投稿をリポスト済みかどうか確認する
   const checkReposted = async (postId, userId) => {
     try {
       const { data, error: fetchError } = await supabase

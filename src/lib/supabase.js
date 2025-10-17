@@ -5,12 +5,11 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error(
-    'Supabaseの環境変数が設定されていません。.envファイルに以下を設定してください:\n' +
-      'VITE_SUPABASE_URL=your-project-url\n' +
-      'VITE_SUPABASE_ANON_KEY=your-anon-key'
+    'Supabaseの環境変数が設定されていません。.env に URL と anon key を指定してください。'
   );
 }
 
+// Supabase クライアントをアプリ全体で共有する
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   auth: {
     autoRefreshToken: true,
@@ -19,6 +18,7 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   }
 });
 
+// テーブル名の定数をまとめて管理する
 export const TABLES = {
   USERS: 'users',
   POSTS: 'posts',
@@ -27,6 +27,7 @@ export const TABLES = {
   FOLLOWS: 'follows'
 };
 
+// 接続確認用の簡易ヘルパー
 export async function checkSupabaseConnection() {
   try {
     const { error } = await supabase.from(TABLES.USERS).select('id').limit(1);

@@ -11,6 +11,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
+// 現在選択されているアイコン ID を内部状態として保持する
 const selectedIcon = ref(props.modelValue);
 
 watch(

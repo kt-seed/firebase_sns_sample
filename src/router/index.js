@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
+// 画面構成ごとのルート定義
 const routes = [
   {
     path: '/',

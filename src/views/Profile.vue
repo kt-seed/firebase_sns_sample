@@ -6,4 +6,5 @@
 </template>
 
 <script setup>
+// プロフィール画面のプレースホルダー
 </script>

@@ -2,15 +2,13 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 
+// ユーザープロフィールをキャッシュしつつ取得するストア
 export const useUsersStore = defineStore('users', () => {
   const profiles = ref({});
   const loading = ref(false);
   const error = ref(null);
 
-  /**
-   * ユーザープロフィールを取得
-   * @param {string} userId - ユーザーID
-   */
+  // users テーブルからプロフィールを取得し、結果をキャッシュする
   const fetchUserProfile = async (userId) => {
     if (!userId) {
       return { data: null, error: new Error('ユーザーIDが設定されていません') };

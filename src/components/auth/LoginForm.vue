@@ -10,6 +10,7 @@ const router = useRouter();
 const { signUp, signIn } = useAuth();
 const toast = useToast();
 
+// true のときはサインアップ、false のときはログインフォームを表示する
 const isSignUp = ref(false);
 const email = ref('');
 const password = ref('');
@@ -35,6 +36,7 @@ const isFormValid = computed(() => {
   return emailValid && passwordValid;
 });
 
+// 認証ボタン押下時のエントリーポイント
 const handleSubmit = async () => {
   if (!isFormValid.value) {
     toast.error('入力内容を確認してください');

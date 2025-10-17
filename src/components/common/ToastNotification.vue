@@ -3,6 +3,7 @@ import { useToast } from '@/composables/useToast';
 
 const { toasts, removeToast } = useToast();
 
+// トーストの種類に応じて背景色を切り替える
 const getToastClass = (type) => {
   const baseClass =
     'px-6 py-4 rounded-lg shadow-lg text-white mb-4 transition-all duration-300 cursor-pointer';

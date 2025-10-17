@@ -6,4 +6,5 @@
 </template>
 
 <script setup>
+// タイムライン画面のプレースホルダー
 </script>

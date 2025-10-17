@@ -6,6 +6,7 @@ import { useAuth } from '@/composables/useAuth';
 
 const { initAuth } = useAuth();
 
+// アプリ起動時に Supabase のセッション状態を同期する
 onMounted(async () => {
   await initAuth();
 });

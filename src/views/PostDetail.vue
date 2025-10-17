@@ -6,4 +6,5 @@
 </template>
 
 <script setup>
+// 投稿詳細画面のプレースホルダー
 </script>

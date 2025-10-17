@@ -1,15 +1,12 @@
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 
+// フォロー関連の操作をまとめた composable
 export function useFollows() {
   const loading = ref(false);
   const error = ref(null);
 
-  /**
-   * ユーザーをフォロー
-   * @param {string} followerId - フォローするユーザーID
-   * @param {string} followingId - フォロー対象ユーザーID
-   */
+  // フォロー関係を作成する
   const followUser = async (followerId, followingId) => {
     loading.value = true;
     error.value = null;
@@ -32,11 +29,7 @@ export function useFollows() {
     }
   };
 
-  /**
-   * フォロー解除
-   * @param {string} followerId - フォローしているユーザーID
-   * @param {string} followingId - フォロー対象ユーザーID
-   */
+  // フォロー関係を削除する
   const unfollowUser = async (followerId, followingId) => {
     loading.value = true;
     error.value = null;
@@ -60,11 +53,7 @@ export function useFollows() {
     }
   };
 
-  /**
-   * フォロー状態を確認
-   * @param {string} followerId - フォローしているユーザーID
-   * @param {string} followingId - フォロー対象ユーザーID
-   */
+  // 指定のフォロー関係が存在するか確認する
   const isFollowing = async (followerId, followingId) => {
     try {
       const { data, error: fetchError } = await supabase
@@ -83,10 +72,7 @@ export function useFollows() {
     }
   };
 
-  /**
-   * フォロワー数を取得
-   * @param {string} userId - ユーザーID
-   */
+  // フォロワー数を取得する
   const getFollowersCount = async (userId) => {
     try {
       const { data, error: fetchError } = await supabase.rpc('get_followers_count', {
@@ -102,10 +88,7 @@ export function useFollows() {
     }
   };
 
-  /**
-   * フォロー中ユーザー数を取得
-   * @param {string} userId - ユーザーID
-   */
+  // フォロー中ユーザー数を取得する
   const getFollowingCount = async (userId) => {
     try {
       const { data, error: fetchError } = await supabase.rpc('get_following_count', {

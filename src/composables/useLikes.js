@@ -1,21 +1,17 @@
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 
+// 投稿に対する「いいね」操作をまとめた composable
 export function useLikes() {
   const loading = ref(false);
   const error = ref(null);
 
-  /**
-   * いいねを追加
-   * @param {string} postId - 投稿ID
-   * @param {string} userId - ユーザーID
-   */
+  // いいねを追加し、集計カラムの値も更新する
   const likePost = async (postId, userId) => {
     loading.value = true;
     error.value = null;
 
     try {
-      // いいねを追加
       const { error: insertError } = await supabase.from('likes').insert({
         post_id: postId,
         user_id: userId
@@ -23,7 +19,6 @@ export function useLikes() {
 
       if (insertError) throw insertError;
 
-      // 投稿のいいね数を更新
       const { error: updateError } = await supabase.rpc('increment_likes_count', {
         post_id: postId
       });
@@ -40,17 +35,12 @@ export function useLikes() {
     }
   };
 
-  /**
-   * いいねを削除
-   * @param {string} postId - 投稿ID
-   * @param {string} userId - ユーザーID
-   */
+  // いいねを取り消し、カウンターも減算する
   const unlikePost = async (postId, userId) => {
     loading.value = true;
     error.value = null;
 
     try {
-      // いいねを削除
       const { error: deleteError } = await supabase
         .from('likes')
         .delete()
@@ -59,7 +49,6 @@ export function useLikes() {
 
       if (deleteError) throw deleteError;
 
-      // 投稿のいいね数を更新
       const { error: updateError } = await supabase.rpc('decrement_likes_count', {
         post_id: postId
       });
@@ -76,11 +65,7 @@ export function useLikes() {
     }
   };
 
-  /**
-   * ユーザーが投稿をいいねしているか確認
-   * @param {string} postId - 投稿ID
-   * @param {string} userId - ユーザーID
-   */
+  // 指定ユーザーが指定投稿にいいね済みか調べる
   const checkLiked = async (postId, userId) => {
     try {
       const { data, error: fetchError } = await supabase

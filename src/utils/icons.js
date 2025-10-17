@@ -1,3 +1,4 @@
+// プロフィールアイコンとして利用できるプリセットの定義
 export const USER_ICONS = [
   { id: 'icon-cat', emoji: '🐱', name: '猫' },
   { id: 'icon-dog', emoji: '🐶', name: '犬' },

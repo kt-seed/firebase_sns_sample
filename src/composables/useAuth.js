@@ -2,13 +2,16 @@ import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_ICON } from '@/utils/icons';
 
+// 認証状態をアプリ全体で共有するためのリアクティブな値
 const user = ref(null);
 const session = ref(null);
 const loading = ref(true);
 
+// Supabase 認証に関する操作をひとまとめにした composable
 export function useAuth() {
   const isAuthenticated = computed(() => !!user.value);
 
+  // メール・パスワードでサインアップする
   const signUp = async (email, password, displayName, icon = DEFAULT_ICON) => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -31,6 +34,7 @@ export function useAuth() {
     }
   };
 
+  // メール・パスワードでログインする
   const signIn = async (email, password) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -46,6 +50,7 @@ export function useAuth() {
     }
   };
 
+  // セッションを破棄してログアウト状態に戻す
   const signOut = async () => {
     try {
       const { error } = await supabase.auth.signOut();
@@ -60,6 +65,7 @@ export function useAuth() {
     }
   };
 
+  // パスワードリセットメールを送信する
   const resetPassword = async (email) => {
     try {
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -74,6 +80,7 @@ export function useAuth() {
     }
   };
 
+  // ログイン中ユーザーのパスワードを変更する
   const updatePassword = async (newPassword) => {
     try {
       const { data, error } = await supabase.auth.updateUser({
@@ -88,6 +95,7 @@ export function useAuth() {
     }
   };
 
+  // users テーブル上のプロフィール情報を更新する
   const updateProfile = async (displayName, icon, bio) => {
     try {
       if (!user.value) {
@@ -114,6 +122,7 @@ export function useAuth() {
     }
   };
 
+  // users テーブルにプロフィールがない場合は初期レコードを作成する
   const ensureUserProfile = async (authUser) => {
     try {
       const { data: existingProfile } = await supabase
@@ -140,6 +149,7 @@ export function useAuth() {
     }
   };
 
+  // アプリ起動時と認証状態の変化を監視して共通状態を更新する
   const initAuth = async () => {
     try {
       const {

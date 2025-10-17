@@ -1,15 +1,13 @@
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 
+// 投稿タイムラインに関する CRUD とリアルタイム購読を提供する composable
 export function usePosts() {
   const posts = ref([]);
   const loading = ref(false);
   const error = ref(null);
 
-  /**
-   * タイムラインの投稿を取得（ユーザー情報とJOIN）
-   * @param {number} limit - 取得する投稿数
-   */
+  // タイムライン投稿を最新順で取得する
   const fetchTimeline = async (limit = 50) => {
     loading.value = true;
     error.value = null;
@@ -42,10 +40,7 @@ export function usePosts() {
     }
   };
 
-  /**
-   * 特定ユーザーの投稿を取得
-   * @param {string} userId - ユーザーID
-   */
+  // 特定ユーザーの投稿だけを取得する
   const fetchUserPosts = async (userId) => {
     loading.value = true;
     error.value = null;
@@ -77,11 +72,7 @@ export function usePosts() {
     }
   };
 
-  /**
-   * 投稿を作成
-   * @param {string} text - 投稿内容
-   * @param {string} userId - 投稿者ID
-   */
+  // 新規投稿を作成し、ローカルタイムラインにも即時反映する
   const createPost = async (text, userId) => {
     loading.value = true;
     error.value = null;
@@ -106,7 +97,6 @@ export function usePosts() {
 
       if (insertError) throw insertError;
 
-      // ローカルの投稿リストに追加
       posts.value.unshift(data);
 
       return { data, error: null };
@@ -119,10 +109,7 @@ export function usePosts() {
     }
   };
 
-  /**
-   * 投稿を削除
-   * @param {string} postId - 投稿ID
-   */
+  // 投稿を削除し、ローカルキャッシュからも取り除く
   const deletePost = async (postId) => {
     loading.value = true;
     error.value = null;
@@ -132,7 +119,6 @@ export function usePosts() {
 
       if (deleteError) throw deleteError;
 
-      // ローカルの投稿リストから削除
       posts.value = posts.value.filter((post) => post.id !== postId);
 
       return { error: null };
@@ -145,9 +131,7 @@ export function usePosts() {
     }
   };
 
-  /**
-   * リアルタイムで投稿を購読
-   */
+  // 投稿テーブルの INSERT / DELETE を購読し、ローカル状態をリアルタイム更新する
   const subscribeToTimeline = () => {
     const channel = supabase
       .channel('timeline-posts')
@@ -159,7 +143,6 @@ export function usePosts() {
           table: 'posts'
         },
         async (payload) => {
-          // 新規投稿をユーザー情報と共に取得
           const { data } = await supabase
             .from('posts')
             .select(
@@ -192,7 +175,7 @@ export function usePosts() {
       )
       .subscribe();
 
-    // クリーンアップ関数を返す
+    // 呼び出し側でチャンネル破棄できるようクリーンアップ関数を返す
     return () => {
       supabase.removeChannel(channel);
     };
