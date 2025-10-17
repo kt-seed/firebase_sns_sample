@@ -54,9 +54,9 @@ graph TB
 ### バックエンド・インフラ
 - **Supabase** - BaaS（Backend as a Service）
   - PostgreSQL - リレーショナルデータベース
-  - Authentication - メール/パスワード認証
-  - Storage - 画像ストレージ（将来的に実装）
-  - Realtime - リアルタイム更新
+  - Authentication - **メール/パスワード認証のみ**（Confirm email: OFF）
+  - Realtime - リアルタイム更新（投稿・いいね・リポスト・フォロー）
+  - Row Level Security (RLS) - 行レベルセキュリティ
 - **Vercel** - ホスティング・デプロイ
 
 ### プラン
@@ -75,37 +75,45 @@ graph TB
 erDiagram
     users ||--o{ posts : "投稿する"
     users ||--o{ likes : "いいねする"
+    users ||--o{ reposts : "リポストする"
     users ||--o{ follows : "フォローする"
     users ||--o{ follows : "フォローされる"
     posts ||--o{ likes : "いいねされる"
-    
+    posts ||--o{ reposts : "リポストされる"
+
     users {
         uuid id PK
         text email UK
         text display_name
-        text photo_url
+        text icon "アイコンID"
         text bio
         timestamp created_at
         timestamp updated_at
     }
-    
+
     posts {
         uuid id PK
         uuid user_id FK
         text text
         int likes_count
-        int retweets_count
-        int replies_count
+        int reposts_count "リポスト数"
         timestamp created_at
     }
-    
+
     likes {
         uuid id PK
         uuid user_id FK
         uuid post_id FK
         timestamp created_at
     }
-    
+
+    reposts {
+        uuid id PK
+        uuid user_id FK
+        uuid post_id FK
+        timestamp created_at
+    }
+
     follows {
         uuid id PK
         uuid follower_id FK
@@ -122,7 +130,7 @@ erDiagram
 | id | UUID | PRIMARY KEY | Supabase Auth連携 |
 | email | TEXT | UNIQUE, NOT NULL | メールアドレス |
 | display_name | TEXT | NOT NULL | 表示名 |
-| photo_url | TEXT | | プロフィール画像URL |
+| icon | TEXT | DEFAULT 'icon-cat', NOT NULL | アイコンID（プリセットから選択） |
 | bio | TEXT | | 自己紹介 |
 | created_at | TIMESTAMP | DEFAULT NOW() | 作成日時 |
 | updated_at | TIMESTAMP | DEFAULT NOW() | 更新日時 |
@@ -134,8 +142,7 @@ erDiagram
 | user_id | UUID | FOREIGN KEY, NOT NULL | 投稿者ID |
 | text | TEXT | NOT NULL, CHECK(1-280文字) | 投稿内容 |
 | likes_count | INTEGER | DEFAULT 0, CHECK(>=0) | いいね数 |
-| retweets_count | INTEGER | DEFAULT 0, CHECK(>=0) | リツイート数 |
-| replies_count | INTEGER | DEFAULT 0, CHECK(>=0) | 返信数 |
+| reposts_count | INTEGER | DEFAULT 0, CHECK(>=0) | リポスト数 |
 | created_at | TIMESTAMP | DEFAULT NOW() | 投稿日時 |
 
 #### likes（いいね）
@@ -145,6 +152,15 @@ erDiagram
 | user_id | UUID | FOREIGN KEY, NOT NULL | いいねしたユーザー |
 | post_id | UUID | FOREIGN KEY, NOT NULL | いいねされた投稿 |
 | created_at | TIMESTAMP | DEFAULT NOW() | いいね日時 |
+| - | - | UNIQUE(user_id, post_id) | 重複防止 |
+
+#### reposts（リポスト）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | UUID | PRIMARY KEY | リポストID |
+| user_id | UUID | FOREIGN KEY, NOT NULL | リポストしたユーザー |
+| post_id | UUID | FOREIGN KEY, NOT NULL | リポストされた投稿 |
+| created_at | TIMESTAMP | DEFAULT NOW() | リポスト日時 |
 | - | - | UNIQUE(user_id, post_id) | 重複防止 |
 
 #### follows（フォロー）
@@ -161,28 +177,50 @@ erDiagram
 
 ### フェーズ1 - コア機能
 - [ ] Supabaseプロジェクトセットアップ
-- [ ] メール/パスワード認証（サインアップ・ログイン）
-- [ ] 投稿の作成・表示（タイムライン）
-- [ ] ユーザープロフィール表示
+- [ ] データベーススキーマ作成（users, posts, likes, reposts, follows）
+- [ ] **メール/パスワード認証**（Confirm email: OFF）
+  - サインアップ・ログイン統合フォーム
+  - パスワードリセット機能
+- [ ] **アイコンシステム**
+  - プリセットアイコン（絵文字）から選択
+  - アイコン選択UI
+- [ ] **投稿機能**
+  - 投稿の作成・表示（文字数カウンター: 280文字制限）
+  - タイムライン表示（「ホーム」「すべて」タブ）
+  - 無限スクロール
+- [ ] **トースト通知システム**（エラー・成功メッセージ）
 - [ ] 投稿の削除（自分の投稿のみ）
 
 ### フェーズ2 - インタラクション
-- [ ] いいね機能
-- [ ] いいね解除
-- [ ] いいね数のリアルタイム更新
+- [ ] **いいね機能**
+  - いいね/いいね解除
+  - いいね数のリアルタイム更新
+- [ ] **リポスト機能**
+  - リポスト/リポスト解除
+  - リポスト数のリアルタイム更新
+- [ ] リアルタイム投稿更新（新規投稿・削除の即時反映）
 
 ### フェーズ3 - 拡張機能
-- [ ] フォロー/フォロワー
-- [ ] フォローしているユーザーのタイムライン
-- [ ] ユーザープロフィール編集
-- [ ] コメント/返信機能
-- [ ] リツイート機能
+- [ ] **プロフィールページ**
+  - ユーザープロフィール表示
+  - プロフィール編集（表示名・アイコン・自己紹介・パスワード）
+- [ ] **フォロー機能**
+  - フォロー/アンフォロー
+  - フォロー数・フォロワー数のリアルタイム更新
+- [ ] **タイムライン分離**
+  - 「ホーム」タブ：フォロー中のユーザーの投稿のみ
+  - 「すべて」タブ：全ユーザーの投稿
 
 ### フェーズ4 - 追加機能（オプション）
-- [ ] 画像アップロード（Supabase Storage）
-- [ ] ハッシュタグ
-- [ ] 検索機能
-- [ ] 通知機能
+- [ ] **ハッシュタグ機能**
+  - ハッシュタグの抽出と検索
+- [ ] **検索機能**
+  - ユーザー検索
+  - 投稿検索
+- [ ] **通知機能**
+  - いいね通知
+  - フォロー通知
+  - リポスト通知
 
 ## 🚀 セットアップ
 

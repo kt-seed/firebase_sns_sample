@@ -188,27 +188,32 @@ twitter-clone/
 │   │       └── main.css
 │   ├── components/          # Vue コンポーネント
 │   │   ├── auth/           # 認証関連
-│   │   │   ├── LoginButton.vue
+│   │   │   ├── LoginForm.vue
 │   │   │   ├── LogoutButton.vue
 │   │   │   └── UserProfile.vue
 │   │   ├── posts/          # 投稿関連
 │   │   │   ├── PostCard.vue
 │   │   │   ├── PostForm.vue
 │   │   │   ├── Timeline.vue
-│   │   │   └── LikeButton.vue
+│   │   │   ├── LikeButton.vue
+│   │   │   └── RepostButton.vue
 │   │   ├── users/          # ユーザー関連
 │   │   │   ├── UserCard.vue
-│   │   │   └── FollowButton.vue
+│   │   │   ├── FollowButton.vue
+│   │   │   ├── IconPicker.vue
+│   │   │   └── ProfileEdit.vue
 │   │   └── common/         # 共通コンポーネント
 │   │       ├── Header.vue
 │   │       ├── Sidebar.vue
 │   │       ├── LoadingSpinner.vue
-│   │       └── ErrorMessage.vue
+│   │       └── ToastNotification.vue
 │   ├── composables/        # Vue Composition API
 │   │   ├── useAuth.js      # 認証ロジック
-│   │   ├── usePosts.js     # 投稿CRUD
+│   │   ├── usePosts.js     # 投稿CRUD（無限スクロール対応）
 │   │   ├── useLikes.js     # いいね機能
-│   │   └── useFollows.js   # フォロー機能
+│   │   ├── useReposts.js   # リポスト機能
+│   │   ├── useFollows.js   # フォロー機能
+│   │   └── useToast.js     # トースト通知
 │   ├── lib/                # ライブラリ設定
 │   │   └── supabase.js     # Supabase初期化
 │   ├── router/             # Vue Router
@@ -224,7 +229,8 @@ twitter-clone/
 │   │   └── Login.vue       # ログイン
 │   ├── utils/              # ユーティリティ関数
 │   │   ├── date.js         # 日付フォーマット
-│   │   └── validation.js   # バリデーション
+│   │   ├── validation.js   # バリデーション
+│   │   └── icons.js        # アイコンプリセット定義
 │   ├── App.vue
 │   └── main.js
 ├── public/
@@ -275,7 +281,7 @@ CREATE TABLE users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT UNIQUE NOT NULL,
   display_name TEXT NOT NULL,
-  photo_url TEXT,
+  icon TEXT DEFAULT 'icon-cat' NOT NULL,
   bio TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -287,13 +293,21 @@ CREATE TABLE posts (
   user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
   text TEXT NOT NULL CHECK (char_length(text) <= 280 AND char_length(text) > 0),
   likes_count INTEGER DEFAULT 0 CHECK (likes_count >= 0),
-  retweets_count INTEGER DEFAULT 0 CHECK (retweets_count >= 0),
-  replies_count INTEGER DEFAULT 0 CHECK (replies_count >= 0),
+  reposts_count INTEGER DEFAULT 0 CHECK (reposts_count >= 0),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- likesテーブル
 CREATE TABLE likes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, post_id)
+);
+
+-- repostsテーブル（新規）
+CREATE TABLE reposts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
   post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
@@ -325,6 +339,10 @@ CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
 CREATE INDEX idx_likes_post_id ON likes(post_id);
 CREATE INDEX idx_likes_user_id ON likes(user_id);
 
+-- repostsテーブル
+CREATE INDEX idx_reposts_post_id ON reposts(post_id);
+CREATE INDEX idx_reposts_user_id ON reposts(user_id);
+
 -- followsテーブル
 CREATE INDEX idx_follows_follower ON follows(follower_id);
 CREATE INDEX idx_follows_following ON follows(following_id);
@@ -337,6 +355,7 @@ CREATE INDEX idx_follows_following ON follows(following_id);
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reposts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
 
 -- usersテーブルのポリシー
@@ -395,6 +414,25 @@ CREATE POLICY "Users can delete own likes"
   TO authenticated
   USING (auth.uid() = user_id);
 
+-- repostsテーブルのポリシー
+-- 認証済みユーザーは全リポストを閲覧可能
+CREATE POLICY "Reposts are viewable by authenticated users"
+  ON reposts FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- 認証済みユーザーはリポスト可能
+CREATE POLICY "Users can create reposts"
+  ON reposts FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+-- 自分のリポストのみ削除可能
+CREATE POLICY "Users can delete own reposts"
+  ON reposts FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
 -- followsテーブルのポリシー
 -- 認証済みユーザーは全フォロー関係を閲覧可能
 CREATE POLICY "Follows are viewable by authenticated users"
@@ -420,10 +458,10 @@ CREATE POLICY "Users can delete own follows"
 ```sql
 -- タイムライン用のビュー（投稿とユーザー情報をJOIN）
 CREATE VIEW timeline_posts AS
-SELECT 
+SELECT
   posts.*,
   users.display_name,
-  users.photo_url
+  users.icon
 FROM posts
 JOIN users ON posts.user_id = users.id
 ORDER BY posts.created_at DESC;
@@ -473,48 +511,36 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 1. Supabase Dashboard → Authentication → Providers
 2. **Email** が既にデフォルトで有効化されています
-3. 設定を確認:
+3. 設定を確認・変更:
    - **Enable Email provider**: ON
-   - **Confirm email**: ON（推奨）
+   - **Confirm email**: **OFF**（開発を迅速化するため、メール確認を無効化）
    - **Secure email change**: ON（推奨）
 
-#### メール送信の設定
+> **重要**: このプロジェクトでは開発効率を優先し、メール確認を無効化します。本番環境では有効化を検討してください。
 
-Supabaseは無料プランでも**1時間に3通まで**メールを送信できます。
+#### メール確認OFF時の動作
 
-##### 開発環境での確認方法
-- Supabase Dashboard → Authentication → Users
-- テストユーザーを作成すると、確認メールのリンクがダッシュボードに表示されます
-- 本番環境では実際にメールが送信されます
+- サインアップ後、即座にログイン可能
+- メール確認のステップが不要
+- 開発・テスト時のユーザー作成が迅速
 
-##### カスタムSMTPの設定（オプション）
-より多くのメールを送信したい場合：
-1. Settings → Project Settings → Auth
-2. SMTP Settings で独自のメールサーバーを設定
-   - SendGrid、Resend、Amazon SES等が使えます
-
-#### 認証フロー図
+#### 認証フロー図（メール確認OFF版）
 
 ```mermaid
 sequenceDiagram
     participant User
     participant App as Vue.js App
     participant Supabase
-    participant Email as メールサービス
     participant DB as PostgreSQL
-    
+
+    Note over User,App: サインアップ時
     User->>App: サインアップフォーム入力
     App->>Supabase: signUp({ email, password })
     Supabase->>DB: auth.usersにユーザー作成
-    Supabase->>Email: 確認メール送信
-    Email->>User: 確認メールを受信
-    User->>Email: 確認リンクをクリック
-    Email->>Supabase: メール確認
-    Supabase->>DB: email_confirmedをtrue
-    Supabase->>App: セッション作成
+    Supabase->>App: セッション作成（即座にログイン）
     App->>DB: usersテーブルにプロフィール作成
     App->>User: ホーム画面へリダイレクト
-    
+
     Note over User,App: ログイン時
     User->>App: ログインフォーム入力
     App->>Supabase: signInWithPassword({ email, password })
@@ -547,6 +573,7 @@ export const TABLES = {
   USERS: 'users',
   POSTS: 'posts',
   LIKES: 'likes',
+  REPOSTS: 'reposts',
   FOLLOWS: 'follows'
 };
 ```
@@ -574,35 +601,28 @@ export function useAuth() {
    * @param {string} email - メールアドレス
    * @param {string} password - パスワード
    * @param {string} displayName - 表示名
+   * @param {string} icon - アイコンID（デフォルト: 'icon-cat'）
    */
-  const signUp = async (email, password, displayName) => {
+  const signUp = async (email, password, displayName, icon = 'icon-cat') => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            display_name: displayName
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+            display_name: displayName,
+            icon
+          }
         }
       });
-      
+
       if (error) throw error;
-      
-      // メール確認が必要な場合
-      if (data.user && !data.session) {
-        return { 
-          data, 
-          error: null,
-          needsEmailConfirmation: true 
-        };
-      }
-      
-      return { data, error: null, needsEmailConfirmation: false };
+
+      // Confirm email OFFの場合、即座にセッションが作成されます
+      return { data, error: null };
     } catch (error) {
       console.error('サインアップエラー:', error);
-      return { data: null, error, needsEmailConfirmation: false };
+      return { data: null, error };
     }
   };
 
@@ -728,13 +748,15 @@ export function useAuth() {
         const displayName = authUser.user_metadata?.display_name 
           || authUser.email.split('@')[0];
 
+        const icon = authUser.user_metadata?.icon || 'icon-cat';
+
         const { error } = await supabase
           .from('users')
           .insert({
             id: authUser.id,
             email: authUser.email,
             display_name: displayName,
-            photo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`
+            icon
           });
 
         if (error) throw error;
@@ -785,7 +807,7 @@ export function usePosts() {
           *,
           users (
             display_name,
-            photo_url
+            icon
           )
         `)
         .order('created_at', { ascending: false })
@@ -819,7 +841,7 @@ export function usePosts() {
           *,
           users (
             display_name,
-            photo_url
+            icon
           )
         `)
         .eq('user_id', userId)
@@ -857,7 +879,7 @@ export function usePosts() {
           *,
           users (
             display_name,
-            photo_url
+            icon
           )
         `)
         .single();
@@ -927,7 +949,7 @@ export function usePosts() {
               *,
               users (
                 display_name,
-                photo_url
+                icon
               )
             `)
             .eq('id', payload.new.id)
@@ -1088,30 +1110,369 @@ export function useLikes() {
 
 ---
 
+### 新機能の実装ガイド
+
+#### `src/utils/icons.js` - アイコンプリセットシステム
+
+```javascript
+/**
+ * ユーザーアイコンのプリセット定義
+ */
+export const USER_ICONS = [
+  { id: 'icon-cat', emoji: '🐱', name: '猫' },
+  { id: 'icon-dog', emoji: '🐶', name: '犬' },
+  { id: 'icon-bear', emoji: '🐻', name: '熊' },
+  { id: 'icon-fox', emoji: '🦊', name: '狐' },
+  { id: 'icon-panda', emoji: '🐼', name: 'パンダ' },
+  { id: 'icon-koala', emoji: '🐨', name: 'コアラ' },
+  { id: 'icon-tiger', emoji: '🐯', name: '虎' },
+  { id: 'icon-lion', emoji: '🦁', name: 'ライオン' },
+  { id: 'icon-monkey', emoji: '🐵', name: '猿' },
+  { id: 'icon-rabbit', emoji: '🐰', name: 'うさぎ' },
+  { id: 'icon-mouse', emoji: '🐭', name: 'ねずみ' },
+  { id: 'icon-hamster', emoji: '🐹', name: 'ハムスター' },
+  { id: 'icon-bird', emoji: '🐦', name: '鳥' },
+  { id: 'icon-penguin', emoji: '🐧', name: 'ペンギン' },
+  { id: 'icon-frog', emoji: '🐸', name: 'カエル' },
+  { id: 'icon-pig', emoji: '🐷', name: '豚' },
+  { id: 'icon-cow', emoji: '🐮', name: '牛' },
+  { id: 'icon-dragon', emoji: '🐲', name: '龍' },
+  { id: 'icon-unicorn', emoji: '🦄', name: 'ユニコーン' },
+  { id: 'icon-alien', emoji: '👽', name: 'エイリアン' }
+];
+
+/**
+ * デフォルトアイコン
+ */
+export const DEFAULT_ICON = 'icon-cat';
+
+/**
+ * アイコンIDから絵文字を取得
+ * @param {string} iconId - アイコンID
+ * @returns {string} 絵文字
+ */
+export function getIconEmoji(iconId) {
+  const icon = USER_ICONS.find(i => i.id === iconId);
+  return icon ? icon.emoji : '👤';
+}
+
+/**
+ * アイコンIDからアイコン情報を取得
+ * @param {string} iconId - アイコンID
+ * @returns {object|null} アイコン情報
+ */
+export function getIconById(iconId) {
+  return USER_ICONS.find(i => i.id === iconId) || null;
+}
+```
+
+#### `src/composables/useReposts.js` - リポスト機能
+
+```javascript
+import { ref } from 'vue';
+import { supabase } from '@/lib/supabase';
+
+export function useReposts() {
+  const loading = ref(false);
+  const error = ref(null);
+
+  /**
+   * リポストを作成
+   * @param {string} postId - 投稿ID
+   * @param {string} userId - ユーザーID
+   */
+  const repostPost = async (postId, userId) => {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      // リポストを追加
+      const { error: insertError } = await supabase
+        .from('reposts')
+        .insert({
+          post_id: postId,
+          user_id: userId
+        });
+
+      if (insertError) throw insertError;
+
+      // 投稿のリポスト数を更新
+      const { error: updateError } = await supabase.rpc('increment_reposts_count', {
+        post_id: postId
+      });
+
+      if (updateError) throw updateError;
+
+      return { error: null };
+    } catch (err) {
+      console.error('リポストエラー:', err);
+      error.value = err.message;
+      return { error: err };
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  /**
+   * リポストを削除
+   * @param {string} postId - 投稿ID
+   * @param {string} userId - ユーザーID
+   */
+  const unrepostPost = async (postId, userId) => {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      // リポストを削除
+      const { error: deleteError } = await supabase
+        .from('reposts')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', userId);
+
+      if (deleteError) throw deleteError;
+
+      // 投稿のリポスト数を更新
+      const { error: updateError } = await supabase.rpc('decrement_reposts_count', {
+        post_id: postId
+      });
+
+      if (updateError) throw updateError;
+
+      return { error: null };
+    } catch (err) {
+      console.error('リポスト解除エラー:', err);
+      error.value = err.message;
+      return { error: err };
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  /**
+   * ユーザーが投稿をリポストしているか確認
+   * @param {string} postId - 投稿ID
+   * @param {string} userId - ユーザーID
+   */
+  const checkReposted = async (postId, userId) => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('reposts')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
+
+      return { reposted: !!data, error: null };
+    } catch (err) {
+      console.error('リポスト確認エラー:', err);
+      return { reposted: false, error: err };
+    }
+  };
+
+  return {
+    loading,
+    error,
+    repostPost,
+    unrepostPost,
+    checkReposted
+  };
+}
+```
+
+#### `src/composables/useToast.js` - トースト通知システム
+
+```javascript
+import { ref } from 'vue';
+
+const toasts = ref([]);
+let toastId = 0;
+
+export function useToast() {
+  /**
+   * トースト通知を表示
+   * @param {string} message - メッセージ
+   * @param {string} type - タイプ ('success', 'error', 'warning', 'info')
+   * @param {number} duration - 表示時間（ミリ秒）
+   */
+  const showToast = (message, type = 'info', duration = 3000) => {
+    const id = toastId++;
+    const toast = {
+      id,
+      message,
+      type,
+      visible: true
+    };
+
+    toasts.value.push(toast);
+
+    // 指定時間後に自動で非表示
+    setTimeout(() => {
+      removeToast(id);
+    }, duration);
+
+    return id;
+  };
+
+  /**
+   * トーストを削除
+   * @param {number} id - トーストID
+   */
+  const removeToast = (id) => {
+    const index = toasts.value.findIndex(t => t.id === id);
+    if (index !== -1) {
+      toasts.value.splice(index, 1);
+    }
+  };
+
+  /**
+   * 成功メッセージを表示
+   * @param {string} message - メッセージ
+   */
+  const success = (message) => showToast(message, 'success');
+
+  /**
+   * エラーメッセージを表示
+   * @param {string} message - メッセージ
+   */
+  const errorToast = (message) => showToast(message, 'error');
+
+  /**
+   * 警告メッセージを表示
+   * @param {string} message - メッセージ
+   */
+  const warning = (message) => showToast(message, 'warning');
+
+  /**
+   * 情報メッセージを表示
+   * @param {string} message - メッセージ
+   */
+  const info = (message) => showToast(message, 'info');
+
+  return {
+    toasts,
+    showToast,
+    removeToast,
+    success,
+    error: errorToast,
+    warning,
+    info
+  };
+}
+```
+
+#### `src/components/common/ToastNotification.vue`
+
+```vue
+<script setup>
+import { useToast } from '@/composables/useToast';
+
+const { toasts, removeToast } = useToast();
+
+/**
+ * タイプに応じたスタイルクラスを取得
+ */
+const getToastClass = (type) => {
+  const baseClass = 'px-6 py-4 rounded-lg shadow-lg text-white mb-4 transition-all duration-300';
+  const typeClasses = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    warning: 'bg-yellow-500',
+    info: 'bg-blue-500'
+  };
+  return `${baseClass} ${typeClasses[type] || typeClasses.info}`;
+};
+</script>
+
+<template>
+  <div class="fixed top-4 right-4 z-50 max-w-md">
+    <transition-group name="toast">
+      <div
+        v-for="toast in toasts"
+        :key="toast.id"
+        :class="getToastClass(toast.type)"
+        @click="removeToast(toast.id)"
+      >
+        <div class="flex items-center justify-between">
+          <span>{{ toast.message }}</span>
+          <button
+            class="ml-4 text-white hover:text-gray-200"
+            @click="removeToast(toast.id)"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </transition-group>
+  </div>
+</template>
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(100%);
+}
+</style>
+```
+
+---
+
 ### データベース関数の追加
 
-いいね数のカウント管理を効率化するため、以下の関数をSupabaseに追加します：
+いいね数・リポスト数のカウント管理を効率化するため、以下の関数をSupabaseに追加します：
 
 ```sql
 -- いいね数を増やす関数
 CREATE OR REPLACE FUNCTION increment_likes_count(post_id UUID)
-RETURNS VOID AS $
+RETURNS VOID AS $$
 BEGIN
   UPDATE posts
   SET likes_count = likes_count + 1
   WHERE id = post_id;
 END;
-$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- いいね数を減らす関数
 CREATE OR REPLACE FUNCTION decrement_likes_count(post_id UUID)
-RETURNS VOID AS $
+RETURNS VOID AS $$
 BEGIN
   UPDATE posts
   SET likes_count = GREATEST(likes_count - 1, 0)
   WHERE id = post_id;
 END;
-$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- リポスト数を増やす関数
+CREATE OR REPLACE FUNCTION increment_reposts_count(post_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE posts
+  SET reposts_count = reposts_count + 1
+  WHERE id = post_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- リポスト数を減らす関数
+CREATE OR REPLACE FUNCTION decrement_reposts_count(post_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE posts
+  SET reposts_count = GREATEST(reposts_count - 1, 0)
+  WHERE id = post_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
 
 ---
@@ -1133,16 +1494,15 @@ const isSignUp = ref(false); // サインアップモードかログインモー
 const email = ref('');
 const password = ref('');
 const displayName = ref('');
+const selectedIcon = ref('icon-cat');
 const error = ref('');
 const loading = ref(false);
-const message = ref('');
 
 /**
  * フォームを送信
  */
 const handleSubmit = async () => {
   error.value = '';
-  message.value = '';
   loading.value = true;
 
   try {
@@ -1153,10 +1513,11 @@ const handleSubmit = async () => {
         return;
       }
 
-      const { error: signUpError, needsEmailConfirmation } = await signUp(
+      const { error: signUpError } = await signUp(
         email.value,
         password.value,
-        displayName.value
+        displayName.value,
+        selectedIcon.value
       );
 
       if (signUpError) {
@@ -1164,11 +1525,8 @@ const handleSubmit = async () => {
         return;
       }
 
-      if (needsEmailConfirmation) {
-        message.value = 'メールを確認して、アカウントを有効化してください';
-      } else {
-        router.push('/');
-      }
+      // Confirm email OFFの場合、即座にログインしてホームへ
+      router.push('/');
     } else {
       // ログイン
       const { error: signInError } = await signIn(email.value, password.value);
@@ -1193,7 +1551,6 @@ const handleSubmit = async () => {
 const toggleMode = () => {
   isSignUp.value = !isSignUp.value;
   error.value = '';
-  message.value = '';
 };
 </script>
 
@@ -1209,11 +1566,6 @@ const toggleMode = () => {
       <!-- エラーメッセージ -->
       <div v-if="error" class="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
         {{ error }}
-      </div>
-
-      <!-- 成功メッセージ -->
-      <div v-if="message" class="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded">
-        {{ message }}
       </div>
 
       <form @submit.prevent="handleSubmit" class="mt-8 space-y-6">
@@ -1294,6 +1646,7 @@ import { ref, computed } from 'vue';
 import { useAuth } from '@/composables/useAuth';
 import { usePosts } from '@/composables/usePosts';
 import { useLikes } from '@/composables/useLikes';
+import { getIconEmoji } from '@/utils/icons';
 
 const props = defineProps({
   post: {
@@ -1350,11 +1703,9 @@ initLikeStatus();
   <div class="border-b border-gray-200 p-4 hover:bg-gray-50">
     <!-- ユーザー情報 -->
     <div class="flex items-start gap-3">
-      <img 
-        :src="post.users.photo_url" 
-        :alt="post.users.display_name"
-        class="w-12 h-12 rounded-full"
-      >
+      <div class="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-2xl">
+        {{ getIconEmoji(post.users.icon) }}
+      </div>
       
       <div class="flex-1">
         <!-- 名前と投稿日時 -->
@@ -1406,41 +1757,58 @@ initLikeStatus();
 1. ✅ Supabaseプロジェクトセットアップ
 2. ✅ データベーススキーマ作成
 3. ✅ RLSポリシー設定
-4. Google OAuth 認証実装
-   - LoginButton.vue
+4. **メール/パスワード認証実装**
+   - LoginForm.vue（サインアップ・ログイン統合）
    - useAuth composable
-5. 投稿機能
-   - PostForm.vue
+   - パスワードリセット機能
+5. **アイコンシステム実装**
+   - icons.js（プリセット定義）
+   - IconPicker.vue（アイコン選択UI）
+6. **投稿機能**
+   - PostForm.vue（文字数カウンター付き）
    - PostCard.vue
-   - Timeline.vue
-   - usePosts composable
-6. 基本レイアウト
+   - Timeline.vue（タブ機能：「ホーム」「すべて」）
+   - usePosts composable（無限スクロール対応）
+7. **基本レイアウト**
    - Header.vue
-   - Home.vue
+   - Home.vue（タブ切り替え機能）
+   - ToastNotification.vue（トースト通知システム）
 
 ### Phase 2: インタラクション
-1. いいね機能
+1. **いいね機能**
    - LikeButton.vue
    - useLikes composable
    - いいね数のリアルタイム更新
-2. 投稿削除機能
+2. **リポスト機能**
+   - RepostButton.vue
+   - useReposts composable
+   - リポスト数のリアルタイム更新
+3. **投稿削除機能**
 
 ### Phase 3: 拡張機能
-1. プロフィールページ
+1. **プロフィールページ**
    - Profile.vue
    - UserCard.vue
-2. フォロー機能
+   - ProfileEdit.vue（表示名・アイコン・自己紹介・パスワード編集）
+2. **フォロー機能**
    - FollowButton.vue
    - useFollows composable
-3. リアルタイム通知
+   - フォロー数のリアルタイム更新
+3. **タイムライン分離**
+   - 「ホーム」タブ：フォロー中のユーザーの投稿
+   - 「すべて」タブ：全ユーザーの投稿
 
 ### Phase 4: 追加機能（オプション）
-1. 画像アップロード
-   - Supabase Storage設定
-   - 画像プレビュー
-2. 返信/コメント機能
-3. ハッシュタグ
-4. 検索機能
+1. **ハッシュタグ機能**
+   - ハッシュタグの抽出と保存
+   - ハッシュタグ検索
+2. **検索機能**
+   - ユーザー検索
+   - 投稿検索
+3. **通知機能**
+   - いいね通知
+   - フォロー通知
+   - リポスト通知
 
 ---
 
