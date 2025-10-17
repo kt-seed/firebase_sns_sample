@@ -79,6 +79,56 @@ describe('usePosts', () => {
     expect(hasMore.value).toBe(false);
   });
 
+  it('フォローが無くてもホームタブで自分の投稿を取得できる', async () => {
+    const postsData = [
+      {
+        id: 'post-self',
+        user_id: 'user-1',
+        text: '自分の投稿',
+        created_at: '2024-01-05T00:00:00.000Z'
+      }
+    ];
+
+    const postsBuilder = {
+      select: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: postsData, error: null }),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis(),
+      insert: vi.fn(),
+      delete: vi.fn()
+    };
+
+    const followsEqMock = vi.fn().mockResolvedValue({ data: [], error: null });
+    const followsSelectMock = vi.fn(() => ({
+      eq: followsEqMock
+    }));
+
+    fromMock.mockImplementation((table) => {
+      if (table === 'posts') {
+        return postsBuilder;
+      }
+      if (table === 'follows') {
+        return {
+          select: followsSelectMock
+        };
+      }
+      return {};
+    });
+
+    const usePosts = await importUsePosts();
+    const { posts, fetchTimeline, hasMore } = usePosts();
+    const { error } = await fetchTimeline({ filter: 'following', userId: 'user-1' });
+
+    expect(error).toBeNull();
+    expect(posts.value).toHaveLength(1);
+    expect(posts.value[0].id).toBe('post-self');
+    expect(followsEqMock).toHaveBeenCalledWith('follower_id', 'user-1');
+    expect(postsBuilder.in).toHaveBeenCalledWith('user_id', ['user-1']);
+    expect(hasMore.value).toBe(false);
+  });
+
   it('createPost 実行時に投稿が追加される', async () => {
     const insertedPost = {
       id: 'post-10',

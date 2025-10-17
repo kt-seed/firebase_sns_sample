@@ -45,6 +45,10 @@ export function usePosts() {
         followingIds = await fetchFollowingIds(userId);
       }
 
+      if (!followingIds.includes(userId)) {
+        followingIds = [...followingIds, userId];
+      }
+
       if (!followingIds.length) {
         return { query: null, followingIds };
       }
