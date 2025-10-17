@@ -24,6 +24,10 @@ const profileIcon = computed(() => {
   return getIconEmoji(user?.user_metadata?.icon);
 });
 
+const currentUserId = computed(() => {
+  return authStore.user?.id ?? null;
+});
+
 const handleLogOut = async () => {
   const { error } = await authStore.signOut();
   if (error) {
@@ -51,10 +55,14 @@ const handleLogOut = async () => {
       </RouterLink>
 
       <div v-else class="flex items-center gap-3">
-        <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700">
+        <RouterLink
+          v-if="currentUserId"
+          :to="`/profile/${currentUserId}`"
+          class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-700 hover:bg-slate-200 transition-colors"
+        >
           <span class="text-xl leading-none">{{ profileIcon }}</span>
           <span>{{ displayName }}</span>
-        </div>
+        </RouterLink>
         <button type="button" class="secondary-button" @click="handleLogOut">
           ログアウト
         </button>
