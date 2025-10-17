@@ -230,12 +230,45 @@ erDiagram
 - Supabaseアカウント
 - メールアドレス（開発・テスト用）
 
-### pnpm のインストール
+### 1. Supabaseプロジェクトの作成
+
+1. https://supabase.com にアクセスしてログイン
+2. 「New Project」をクリック
+3. プロジェクト設定：
+   - Name: `anonymous-sns`
+   - Database Password: 強力なパスワードを生成（保存必須）
+   - Region: `Northeast Asia (Tokyo)` - ap-northeast-1
+   - Pricing Plan: Free
+
+### 2. データベーススキーマの作成
+
+**📁 SQLマイグレーションファイルは `supabase/migrations/` に用意されています。**
+
+詳細な手順は [supabase/README.md](supabase/README.md) を参照してください。
+
+#### 簡易手順
+
+1. Supabase Dashboard → SQL Editor → New Query
+2. 以下のファイルを**順番に**実行：
+   - `supabase/migrations/001_initial_schema.sql`
+   - `supabase/migrations/002_add_indexes.sql`
+   - `supabase/migrations/003_rls_policies.sql`
+   - `supabase/migrations/004_views_and_functions.sql`
+
+3. **Realtime有効化**:
+   - Database → Replication
+   - posts, likes, reposts, followsテーブルを有効化
+
+4. **Authentication設定**:
+   - Authentication → Providers → Email
+   - **Confirm email を OFF に変更**
+
+### 3. pnpm のインストール
 ```bash
 npm install -g pnpm
 ```
 
-### プロジェクトの初期化
+### 4. プロジェクトの初期化
 ```bash
 # Vue.jsプロジェクト作成
 pnpm create vue@latest twitter-clone
@@ -254,12 +287,14 @@ pnpm add -D tailwindcss postcss autoprefixer
 npx tailwindcss init -p
 ```
 
-### 環境変数を設定
+### 5. 環境変数を設定
 `.env`ファイルを作成：
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
+
+> **ヒント**: Supabase Dashboard → Settings → API で URL と anon key を確認できます。
 
 ### 開発サーバー起動
 ```bash
@@ -362,7 +397,7 @@ Supabaseの**RLS（行レベルセキュリティ）**により、各ユーザ�
 - ✅ 全ユーザーは全投稿を閲覧可能
 - ✅ 認証済みユーザーのみ投稿作成可能
 - ✅ 自分の投稿のみ削除可能
-- ✅ 自分のいいねのみ削除可能
+- ✅ 自分のいいね・リポストのみ削除可能
 - ✅ 自分のフォローのみ削除可能
 
-詳細は`CLAUDE.md`を参照してください。
+**RLSポリシーの詳細**は [supabase/migrations/003_rls_policies.sql](supabase/migrations/003_rls_policies.sql) を参照してください。

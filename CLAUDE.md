@@ -268,242 +268,37 @@ twitter-clone/
 
 ### 2. データベーススキーマの作成
 
-Supabase Dashboard → SQL Editor → New Query
+**📁 マイグレーションファイルは `supabase/migrations/` ディレクトリに用意されています。**
 
-#### マイグレーション1: 初期スキーマ
+詳細な実行手順は [supabase/README.md](../supabase/README.md) を参照してください。
 
-```sql
--- UUIDの拡張を有効化
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+#### 実行手順の概要
 
--- usersテーブル
-CREATE TABLE users (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT UNIQUE NOT NULL,
-  display_name TEXT NOT NULL,
-  icon TEXT DEFAULT 'icon-cat' NOT NULL,
-  bio TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+1. Supabase Dashboard → SQL Editor → New Query
+2. 以下のマイグレーションファイルを**順番に**実行：
+   - `001_initial_schema.sql` - テーブル作成
+   - `002_add_indexes.sql` - インデックス追加
+   - `003_rls_policies.sql` - セキュリティポリシー設定
+   - `004_views_and_functions.sql` - ビュー・関数作成
 
--- postsテーブル
-CREATE TABLE posts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-  text TEXT NOT NULL CHECK (char_length(text) <= 280 AND char_length(text) > 0),
-  likes_count INTEGER DEFAULT 0 CHECK (likes_count >= 0),
-  reposts_count INTEGER DEFAULT 0 CHECK (reposts_count >= 0),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+3. Realtime有効化（Database → Replication）
+   - posts, likes, reposts, followsテーブルを有効化
 
--- likesテーブル
-CREATE TABLE likes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, post_id)
-);
+#### スキーマ構成
 
--- repostsテーブル（新規）
-CREATE TABLE reposts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, post_id)
-);
+**テーブル一覧**:
+- `users` - ユーザー情報（icon: アイコンID）
+- `posts` - 投稿（reposts_count: リポスト数）
+- `likes` - いいね
+- `reposts` - リポスト（新規）
+- `follows` - フォロー関係
 
--- followsテーブル
-CREATE TABLE follows (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  follower_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-  following_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(follower_id, following_id),
-  CHECK (follower_id != following_id)
-);
-```
+**主要な関数**:
+- `increment_likes_count()` / `decrement_likes_count()`
+- `increment_reposts_count()` / `decrement_reposts_count()`
+- `get_followers_count()` / `get_following_count()`
 
-#### マイグレーション2: インデックスの追加
-
-```sql
--- パフォーマンス向上のためのインデックス
-
--- postsテーブル
-CREATE INDEX idx_posts_user_id ON posts(user_id);
-CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
-
--- likesテーブル
-CREATE INDEX idx_likes_post_id ON likes(post_id);
-CREATE INDEX idx_likes_user_id ON likes(user_id);
-
--- repostsテーブル
-CREATE INDEX idx_reposts_post_id ON reposts(post_id);
-CREATE INDEX idx_reposts_user_id ON reposts(user_id);
-
--- followsテーブル
-CREATE INDEX idx_follows_follower ON follows(follower_id);
-CREATE INDEX idx_follows_following ON follows(following_id);
-```
-
-#### マイグレーション3: Row Level Security (RLS)
-
-```sql
--- RLSを有効化
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE likes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reposts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE follows ENABLE ROW LEVEL SECURITY;
-
--- usersテーブルのポリシー
--- 全ユーザー情報は誰でも閲覧可能
-CREATE POLICY "Users are viewable by everyone"
-  ON users FOR SELECT
-  USING (true);
-
--- 自分のプロフィールのみ更新可能
-CREATE POLICY "Users can update own profile"
-  ON users FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = id);
-
--- 新規ユーザーの自動作成（auth.usersと連携）
-CREATE POLICY "Users can insert own profile"
-  ON users FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = id);
-
--- postsテーブルのポリシー
--- 認証済みユーザーは全投稿を閲覧可能
-CREATE POLICY "Posts are viewable by authenticated users"
-  ON posts FOR SELECT
-  TO authenticated
-  USING (true);
-
--- 認証済みユーザーは投稿を作成可能
-CREATE POLICY "Users can create posts"
-  ON posts FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
--- 自分の投稿のみ削除可能
-CREATE POLICY "Users can delete own posts"
-  ON posts FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
-
--- likesテーブルのポリシー
--- 認証済みユーザーは全いいねを閲覧可能
-CREATE POLICY "Likes are viewable by authenticated users"
-  ON likes FOR SELECT
-  TO authenticated
-  USING (true);
-
--- 認証済みユーザーはいいね可能
-CREATE POLICY "Users can create likes"
-  ON likes FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
--- 自分のいいねのみ削除可能
-CREATE POLICY "Users can delete own likes"
-  ON likes FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
-
--- repostsテーブルのポリシー
--- 認証済みユーザーは全リポストを閲覧可能
-CREATE POLICY "Reposts are viewable by authenticated users"
-  ON reposts FOR SELECT
-  TO authenticated
-  USING (true);
-
--- 認証済みユーザーはリポスト可能
-CREATE POLICY "Users can create reposts"
-  ON reposts FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
--- 自分のリポストのみ削除可能
-CREATE POLICY "Users can delete own reposts"
-  ON reposts FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
-
--- followsテーブルのポリシー
--- 認証済みユーザーは全フォロー関係を閲覧可能
-CREATE POLICY "Follows are viewable by authenticated users"
-  ON follows FOR SELECT
-  TO authenticated
-  USING (true);
-
--- 認証済みユーザーはフォロー可能
-CREATE POLICY "Users can create follows"
-  ON follows FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = follower_id);
-
--- 自分のフォローのみ削除可能
-CREATE POLICY "Users can delete own follows"
-  ON follows FOR DELETE
-  TO authenticated
-  USING (auth.uid() = follower_id);
-```
-
-#### マイグレーション4: 便利なビューとファンクション
-
-```sql
--- タイムライン用のビュー（投稿とユーザー情報をJOIN）
-CREATE VIEW timeline_posts AS
-SELECT
-  posts.*,
-  users.display_name,
-  users.icon
-FROM posts
-JOIN users ON posts.user_id = users.id
-ORDER BY posts.created_at DESC;
-
--- ユーザーがいいねした投稿を取得する関数
-CREATE OR REPLACE FUNCTION user_liked_posts(target_user_id UUID)
-RETURNS TABLE (
-  post_id UUID,
-  liked_at TIMESTAMP WITH TIME ZONE
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT likes.post_id, likes.created_at
-  FROM likes
-  WHERE likes.user_id = target_user_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- フォロワー数を取得する関数
-CREATE OR REPLACE FUNCTION get_followers_count(target_user_id UUID)
-RETURNS INTEGER AS $$
-BEGIN
-  RETURN (
-    SELECT COUNT(*)
-    FROM follows
-    WHERE following_id = target_user_id
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- フォロー数を取得する関数
-CREATE OR REPLACE FUNCTION get_following_count(target_user_id UUID)
-RETURNS INTEGER AS $$
-BEGIN
-  RETURN (
-    SELECT COUNT(*)
-    FROM follows
-    WHERE follower_id = target_user_id
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-```
+完全なスキーマとRLSポリシーは `supabase/migrations/` を参照してください。
 
 ### 3. Authentication 設定
 
