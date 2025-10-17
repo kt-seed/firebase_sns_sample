@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+.vercel/
+.output/
+.DS_Store
+Thumbs.db
+pnpm-debug.log*
+vite.svg
