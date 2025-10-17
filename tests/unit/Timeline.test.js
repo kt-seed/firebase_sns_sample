@@ -43,7 +43,7 @@ vi.mock('@/stores/posts', () => ({
 }));
 
 let isAuthenticatedValue;
-const authUserRef = { value: null };
+let authUserValue = null;
 
 const authStoreMock = {};
 
@@ -54,7 +54,12 @@ Object.defineProperty(authStoreMock, 'isAuthenticated', {
   }
 });
 
-authStoreMock.user = authUserRef;
+Object.defineProperty(authStoreMock, 'user', {
+  get: () => authUserValue,
+  set: (val) => {
+    authUserValue = val;
+  }
+});
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => authStoreMock
@@ -70,6 +75,10 @@ const PostCardStub = {
     isOwnPost: {
       type: Boolean,
       default: false
+    },
+    repostUser: {
+      type: Object,
+      default: null
     }
   }
 };
@@ -99,7 +108,7 @@ beforeEach(() => {
   postsStoreMock.subscribeToTimeline.mockReturnValue(() => {});
 
   isAuthenticatedValue = true;
-  authUserRef.value = { id: 'user-1' };
+  authStoreMock.user = { id: 'user-1' };
 
   toastInfoMock.mockReset();
   toastErrorMock.mockReset();
@@ -129,7 +138,7 @@ afterAll(() => {
 describe('Timeline.vue', () => {
   it('未ログイン時にホームタブを開くとタイムライン取得をスキップする', async () => {
     authStoreMock.isAuthenticated = false;
-    authUserRef.value = null;
+    authStoreMock.user = null;
 
     const wrapper = mountTimeline();
     await flushPromises();
@@ -165,7 +174,11 @@ describe('Timeline.vue', () => {
 
   it('投稿削除イベントでストア関数とトーストを呼び出す', async () => {
     postsStoreMock.posts = [
-      { id: 'post-1', user_id: 'user-1', text: 'テスト投稿' }
+      {
+        timeline_id: 'post-post-1',
+        post: { id: 'post-1', user_id: 'user-1', text: 'テスト投稿' },
+        repost_user: null
+      }
     ];
 
     const wrapper = mountTimeline();

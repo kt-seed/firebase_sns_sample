@@ -126,7 +126,7 @@ const emptyStateMessage = () => {
 };
 
 // Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
-const isOwnPost = (post) => authStore.user?.id === post.user_id;
+const isOwnPost = (entry) => authStore.user?.id === entry.post.user_id;
 
 const handleDelete = async (postId) => {
   const { error } = await postsStore.deletePost(postId);
@@ -159,10 +159,11 @@ const handleDelete = async (postId) => {
 
       <template v-else>
         <PostCard
-          v-for="post in postsStore.posts"
-          :key="post.id"
-          :post="post"
-          :is-own-post="isOwnPost(post)"
+          v-for="entry in postsStore.posts"
+          :key="entry.timeline_id"
+          :post="entry.post"
+          :repost-user="entry.repost_user"
+          :is-own-post="isOwnPost(entry)"
           @delete="handleDelete"
         />
 
