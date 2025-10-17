@@ -7,120 +7,220 @@
 - **目的**: ポートフォリオ/ショーケース用のSNSアプリケーション
 - **コンセプト**: シンプルで使いやすいTwitter風の投稿プラットフォーム
 
+## 🏗️ アーキテクチャ
+
+```mermaid
+graph TB
+    subgraph "クライアント"
+        A[Vue.js SPA]
+    end
+    
+    subgraph "Vercel"
+        B[静的ホスティング]
+    end
+    
+    subgraph "Supabase"
+        C[PostgreSQL Database]
+        D[Authentication]
+        E[Storage]
+        F[Realtime]
+        G[Email Service]
+    end
+    
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    A --> F
+    D --> G
+    
+    style A fill:#42b883
+    style B fill:#000
+    style C fill:#3ecf8e
+    style D fill:#3ecf8e
+    style E fill:#3ecf8e
+    style F fill:#3ecf8e
+    style G fill:#3ecf8e
+```
+
 ## 🛠 技術スタック
 
 ### フロントエンド
 - **Vue.js 3** - メインフレームワーク
 - **Vite** - ビルドツール
-- **Tailwind CSS** - スタイリング（推奨）
+- **Tailwind CSS** - スタイリング
+- **Pinia** - 状態管理
 
 ### バックエンド・インフラ
-- **Firebase Authentication** - Google OAuth認証
-- **Firebase Firestore** - NoSQLデータベース（投稿データ保存）
-- **Firebase Storage** - 画像ストレージ
+- **Supabase** - BaaS（Backend as a Service）
+  - PostgreSQL - リレーショナルデータベース
+  - Authentication - メール/パスワード認証
+  - Storage - 画像ストレージ（将来的に実装）
+  - Realtime - リアルタイム更新
 - **Vercel** - ホスティング・デプロイ
 
 ### プラン
-- **Firebase Spark（無料プラン）**
-  - Firestore: 1GB、50K読み取り/日、20K書き込み/日
-  - Storage: 5GB、1GB/日ダウンロード
-  - Authentication: 無制限
+- **Supabase Free tier**
+  - Database: 500MB
+  - Storage: 1GB
+  - Auth Users: 50,000 MAU
+  - Realtime: 200同時接続
+  - API Requests: 無制限（帯域制限あり）
+
+## 📊 データベース設計
+
+### ER図
+
+```mermaid
+erDiagram
+    users ||--o{ posts : "投稿する"
+    users ||--o{ likes : "いいねする"
+    users ||--o{ follows : "フォローする"
+    users ||--o{ follows : "フォローされる"
+    posts ||--o{ likes : "いいねされる"
+    
+    users {
+        uuid id PK
+        text email UK
+        text display_name
+        text photo_url
+        text bio
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    posts {
+        uuid id PK
+        uuid user_id FK
+        text text
+        int likes_count
+        int retweets_count
+        int replies_count
+        timestamp created_at
+    }
+    
+    likes {
+        uuid id PK
+        uuid user_id FK
+        uuid post_id FK
+        timestamp created_at
+    }
+    
+    follows {
+        uuid id PK
+        uuid follower_id FK
+        uuid following_id FK
+        timestamp created_at
+    }
+```
+
+### テーブル詳細
+
+#### users（ユーザー）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | UUID | PRIMARY KEY | Supabase Auth連携 |
+| email | TEXT | UNIQUE, NOT NULL | メールアドレス |
+| display_name | TEXT | NOT NULL | 表示名 |
+| photo_url | TEXT | | プロフィール画像URL |
+| bio | TEXT | | 自己紹介 |
+| created_at | TIMESTAMP | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMP | DEFAULT NOW() | 更新日時 |
+
+#### posts（投稿）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | UUID | PRIMARY KEY | 投稿ID |
+| user_id | UUID | FOREIGN KEY, NOT NULL | 投稿者ID |
+| text | TEXT | NOT NULL, CHECK(1-280文字) | 投稿内容 |
+| likes_count | INTEGER | DEFAULT 0, CHECK(>=0) | いいね数 |
+| retweets_count | INTEGER | DEFAULT 0, CHECK(>=0) | リツイート数 |
+| replies_count | INTEGER | DEFAULT 0, CHECK(>=0) | 返信数 |
+| created_at | TIMESTAMP | DEFAULT NOW() | 投稿日時 |
+
+#### likes（いいね）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | UUID | PRIMARY KEY | いいねID |
+| user_id | UUID | FOREIGN KEY, NOT NULL | いいねしたユーザー |
+| post_id | UUID | FOREIGN KEY, NOT NULL | いいねされた投稿 |
+| created_at | TIMESTAMP | DEFAULT NOW() | いいね日時 |
+| - | - | UNIQUE(user_id, post_id) | 重複防止 |
+
+#### follows（フォロー）
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | UUID | PRIMARY KEY | フォローID |
+| follower_id | UUID | FOREIGN KEY, NOT NULL | フォローする人 |
+| following_id | UUID | FOREIGN KEY, NOT NULL | フォローされる人 |
+| created_at | TIMESTAMP | DEFAULT NOW() | フォロー日時 |
+| - | - | UNIQUE(follower_id, following_id) | 重複防止 |
+| - | - | CHECK(follower_id != following_id) | 自己フォロー防止 |
 
 ## 🎯 主要機能（MVP）
 
 ### フェーズ1 - コア機能
-- [x] Google OAuth ログイン
+- [ ] Supabaseプロジェクトセットアップ
+- [ ] メール/パスワード認証（サインアップ・ログイン）
 - [ ] 投稿の作成・表示（タイムライン）
 - [ ] ユーザープロフィール表示
 - [ ] 投稿の削除（自分の投稿のみ）
 
 ### フェーズ2 - インタラクション
 - [ ] いいね機能
-- [ ] コメント/返信機能
-- [ ] リツイート機能
+- [ ] いいね解除
+- [ ] いいね数のリアルタイム更新
 
 ### フェーズ3 - 拡張機能
 - [ ] フォロー/フォロワー
-- [ ] 画像アップロード
+- [ ] フォローしているユーザーのタイムライン
+- [ ] ユーザープロフィール編集
+- [ ] コメント/返信機能
+- [ ] リツイート機能
+
+### フェーズ4 - 追加機能（オプション）
+- [ ] 画像アップロード（Supabase Storage）
 - [ ] ハッシュタグ
 - [ ] 検索機能
-- [ ] ユーザープロフィール編集
-
-## 📊 データ構造
-
-### users コレクション
-```javascript
-{
-  uid: string,              // Google OAuth UID
-  displayName: string,      // 表示名
-  photoURL: string,         // プロフィール画像URL
-  email: string,            // メールアドレス
-  createdAt: timestamp,     // アカウント作成日時
-  followersCount: number,   // フォロワー数
-  followingCount: number    // フォロー数
-}
-```
-
-### posts コレクション
-```javascript
-{
-  id: string,               // 自動生成ID
-  text: string,             // 投稿内容（最大280文字）
-  authorId: string,         // 投稿者UID
-  authorName: string,       // 投稿者名（非正規化）
-  authorPhoto: string,      // 投稿者画像URL（非正規化）
-  createdAt: timestamp,     // 投稿日時
-  likesCount: number,       // いいね数
-  repliesCount: number,     // 返信数
-  retweetsCount: number     // リツイート数
-}
-```
-
-### likes コレクション
-```javascript
-{
-  postId: string,           // 投稿ID
-  userId: string,           // いいねしたユーザーID
-  createdAt: timestamp      // いいね日時
-}
-```
+- [ ] 通知機能
 
 ## 🚀 セットアップ
 
 ### 前提条件
 - Node.js 18以上
 - **pnpm** (パッケージマネージャー)
-- Firebaseプロジェクト
-- Googleアカウント
+- Supabaseアカウント
+- メールアドレス（開発・テスト用）
 
 ### pnpm のインストール
 ```bash
 npm install -g pnpm
 ```
 
-### インストール
+### プロジェクトの初期化
 ```bash
-# リポジトリをクローン
-git clone [repository-url]
+# Vue.jsプロジェクト作成
+pnpm create vue@latest twitter-clone
+
+# プロジェクトディレクトリに移動
 cd twitter-clone
 
 # 依存関係をインストール
 pnpm install
 
-# 環境変数を設定
-cp .env.example .env
-# .envファイルにFirebaseの設定を記入
+# Supabase SDKをインストール
+pnpm add @supabase/supabase-js
+
+# Tailwind CSSをインストール（推奨）
+pnpm add -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
 ```
 
-### 環境変数
-`.env`ファイルに以下を設定：
-```
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+### 環境変数を設定
+`.env`ファイルを作成：
+```bash
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ### 開発サーバー起動
@@ -142,6 +242,10 @@ pnpm add -g vercel
 
 # デプロイ
 vercel
+
+# 環境変数を設定
+vercel env add VITE_SUPABASE_URL
+vercel env add VITE_SUPABASE_ANON_KEY
 ```
 
 または、GitHubリポジトリと連携して自動デプロイ。
@@ -160,7 +264,8 @@ vercel
 - ✅ データ構造の変更時
 - ✅ セットアップ手順の変更時
 - ✅ 技術スタックの追加・変更時
-- ✅ セキュリティルールの更新時
+- ✅ セキュリティポリシーの更新時
+- ✅ ER図やアーキテクチャの変更時
 
 ## 🌐 言語方針
 
@@ -178,12 +283,12 @@ vercel
 ### コミットメッセージの例
 ```bash
 # Good ✅
-git commit -m "feat: Google OAuth認証機能を実装"
+git commit -m "feat: メール/パスワード認証機能を実装"
 git commit -m "fix: タイムラインの表示順序を修正"
-git commit -m "docs: README.mdにデプロイ手順を追加"
+git commit -m "docs: README.mdにER図を追加"
 
 # Bad ❌
-git commit -m "feat: implement google oauth"
+git commit -m "feat: implement email auth"
 git commit -m "fix timeline order"
 ```
 
@@ -192,29 +297,34 @@ git commit -m "fix timeline order"
 // Good ✅
 // ユーザーの投稿を取得してタイムラインに表示する
 const fetchUserPosts = async (userId) => {
-  // Firestoreから最新50件を取得
-  const posts = await getPosts(userId, 50);
-  return posts;
+  // Supabaseから最新50件を取得
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  
+  return data;
 };
 
 // Bad ❌
 // Fetch user posts and display on timeline
 const fetchUserPosts = async (userId) => {
-  // Get latest 50 from Firestore
-  const posts = await getPosts(userId, 50);
-  return posts;
+  const { data } = await supabase.from('posts').select('*');
+  return data;
 };
 ```
 
 ## 🔒 セキュリティ
 
-### Firestoreセキュリティルール
-- 認証済みユーザーのみ読み書き可能
-- ユーザーは自分の投稿のみ削除可能
-- いいね・フォローの重複防止
+### Row Level Security (RLS)
+Supabaseの**RLS（行レベルセキュリティ）**により、各ユーザーは適切なデータのみアクセス可能：
 
-### Storageセキュリティルール
-- 認証済みユーザーのみアップロード可能
-- ファイルサイズ制限: 5MB
-- 画像形式のみ許可
+- ✅ 全ユーザーは全投稿を閲覧可能
+- ✅ 認証済みユーザーのみ投稿作成可能
+- ✅ 自分の投稿のみ削除可能
+- ✅ 自分のいいねのみ削除可能
+- ✅ 自分のフォローのみ削除可能
 
+詳細は`CLAUDE.md`を参照してください。
