@@ -10,7 +10,6 @@ const authStore = useAuthStore();
 const toast = useToast();
 
 const displayName = computed(() => {
-  // Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
   const user = authStore.user;
   if (!user) {
     return 'ゲスト';
@@ -19,14 +18,11 @@ const displayName = computed(() => {
 });
 
 const profileIcon = computed(() => {
-  // Piniaストアから返されるrefは自動的にアンラップされるため、.valueは不要
   const user = authStore.user;
   return getIconEmoji(user?.user_metadata?.icon);
 });
 
-const currentUserId = computed(() => {
-  return authStore.user?.id ?? null;
-});
+const currentUserId = computed(() => authStore.user?.id ?? null);
 
 const handleLogOut = async () => {
   const { error } = await authStore.signOut();
