@@ -1,15 +1,13 @@
 <script setup>
-import { onMounted } from 'vue';
 import { RouterView } from 'vue-router';
 import ToastNotification from '@/components/common/ToastNotification.vue';
-import { useAuth } from '@/composables/useAuth';
+import { useAuthStore } from '@/stores/auth';
 
-const { initAuth } = useAuth();
+const authStore = useAuthStore();
 
 // アプリ起動時に Supabase のセッション状態を同期する
-onMounted(async () => {
-  await initAuth();
-});
+// onMountedではなく、setup時点で実行して、ルーターガードが動作する前に認証状態を初期化する
+authStore.initAuth();
 </script>
 
 <template>

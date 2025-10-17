@@ -3,28 +3,27 @@ import { useToast } from '@/composables/useToast';
 
 const { toasts, removeToast } = useToast();
 
-// トーストの種類に応じて背景色を切り替える
-const getToastClass = (type) => {
-  const baseClass =
-    'px-6 py-4 rounded-lg shadow-lg text-white mb-4 transition-all duration-300 cursor-pointer';
-  const typeClasses = {
-    success: 'bg-green-500 hover:bg-green-600',
-    error: 'bg-red-500 hover:bg-red-600',
-    warning: 'bg-yellow-500 hover:bg-yellow-600',
-    info: 'bg-blue-500 hover:bg-blue-600'
-  };
-  return `${baseClass} ${typeClasses[type] || typeClasses.info}`;
+const toastClassMap = {
+  success: 'bg-green-500 hover:bg-green-600',
+  error: 'bg-red-500 hover:bg-red-600',
+  warning: 'bg-yellow-500 hover:bg-yellow-600',
+  info: 'bg-blue-500 hover:bg-blue-600'
 };
 
-const getToastIcon = (type) => {
-  const icons = {
-    success: 'OK',
-    error: 'ERR',
-    warning: '!',
-    info: 'i'
-  };
-  return icons[type] || icons.info;
+const toastIconMap = {
+  success: '✔',
+  error: '✖',
+  warning: '⚠',
+  info: 'ℹ'
 };
+
+const resolveToastClass = (type) => {
+  const baseClass =
+    'px-6 py-4 rounded-lg shadow-lg text-white mb-3 transition-all duration-300 cursor-pointer';
+  return `${baseClass} ${toastClassMap[type] ?? toastClassMap.info}`;
+};
+
+const resolveToastIcon = (type) => toastIconMap[type] ?? toastIconMap.info;
 </script>
 
 <template>
@@ -33,19 +32,22 @@ const getToastIcon = (type) => {
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        :class="getToastClass(toast.type)"
+        :class="resolveToastClass(toast.type)"
         @click="removeToast(toast.id)"
       >
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="text-sm font-bold uppercase tracking-wide">{{ getToastIcon(toast.type) }}</span>
-            <span class="font-medium">{{ toast.message }}</span>
-          </div>
+        <div class="flex items-start gap-3">
+          <span class="text-lg font-bold leading-none pt-0.5">
+            {{ resolveToastIcon(toast.type) }}
+          </span>
+          <p class="text-sm leading-relaxed">
+            {{ toast.message }}
+          </p>
           <button
-            class="ml-4 text-white hover:text-gray-200 transition-colors"
+            class="ml-auto text-sm text-white/80 hover:text-white transition-colors"
+            type="button"
+            aria-label="閉じる"
             @click.stop="removeToast(toast.id)"
           >
-            <span class="sr-only">閉じる</span>
             ×
           </button>
         </div>
@@ -56,21 +58,14 @@ const getToastIcon = (type) => {
 
 <style scoped>
 .toast-enter-active,
-.toast-leave-active {
+.toast-leave-active,
+.toast-move {
   transition: all 0.3s ease;
 }
 
-.toast-enter-from {
-  opacity: 0;
-  transform: translateX(100%);
-}
-
+.toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(100%);
-}
-
-.toast-move {
-  transition: transform 0.3s ease;
+  transform: translateX(30px);
 }
 </style>

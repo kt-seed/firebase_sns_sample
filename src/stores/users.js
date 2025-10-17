@@ -2,16 +2,15 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 
-// ユーザープロフィールをキャッシュしつつ取得するストア
+// users テーブルのプロフィールをキャッシュしながら取得するストア
 export const useUsersStore = defineStore('users', () => {
   const profiles = ref({});
   const loading = ref(false);
   const error = ref(null);
 
-  // users テーブルからプロフィールを取得し、結果をキャッシュする
   const fetchUserProfile = async (userId) => {
     if (!userId) {
-      return { data: null, error: new Error('ユーザーIDが設定されていません') };
+      return { data: null, error: new Error('ユーザーIDが指定されていません。') };
     }
 
     loading.value = true;
@@ -29,7 +28,7 @@ export const useUsersStore = defineStore('users', () => {
       profiles.value[userId] = data;
       return { data, error: null };
     } catch (err) {
-      console.error('ユーザープロフィール取得エラー:', err);
+      console.error('ユーザープロフィールの取得に失敗しました:', err);
       error.value = err.message;
       return { data: null, error: err };
     } finally {

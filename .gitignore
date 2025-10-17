@@ -64,3 +64,6 @@ tmp/
 # useful for speeding up local rebuilds but unnecessary in git
 .eslintcache
 .stylelintcache
+
+# Claude
+.claude/settings.local.json

@@ -1,27 +1,11 @@
 import { defineStore } from 'pinia';
 import { usePosts } from '@/composables/usePosts';
 
-// 投稿周りのロジックを Pinia ストア経由で再利用できるようにする
+// 投稿まわりのロジックを Pinia ストアとして公開する
 export const usePostsStore = defineStore('posts', () => {
-  const {
-    posts,
-    loading,
-    error,
-    fetchTimeline,
-    fetchUserPosts,
-    createPost,
-    deletePost,
-    subscribeToTimeline
-  } = usePosts();
+  const postComposable = usePosts();
 
   return {
-    posts,
-    loading,
-    error,
-    fetchTimeline,
-    fetchUserPosts,
-    createPost,
-    deletePost,
-    subscribeToTimeline
+    ...postComposable
   };
 });

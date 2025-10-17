@@ -2,16 +2,16 @@ import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_ICON } from '@/utils/icons';
 
-// 認証状態をアプリ全体で共有するためのリアクティブな値
+// アプリ全体で共有する認証状態
 const user = ref(null);
 const session = ref(null);
 const loading = ref(true);
 
-// Supabase 認証に関する操作をひとまとめにした composable
+let authSubscription = null;
+
 export function useAuth() {
   const isAuthenticated = computed(() => !!user.value);
 
-  // メール・パスワードでサインアップする
   const signUp = async (email, password, displayName, icon = DEFAULT_ICON) => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -26,15 +26,13 @@ export function useAuth() {
       });
 
       if (error) throw error;
-
       return { data, error: null };
     } catch (error) {
-      console.error('サインアップエラー:', error);
+      console.error('サインアップに失敗しました:', error);
       return { data: null, error };
     }
   };
 
-  // メール・パスワードでログインする
   const signIn = async (email, password) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -45,12 +43,11 @@ export function useAuth() {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('ログインエラー:', error);
+      console.error('ログインに失敗しました:', error);
       return { data: null, error };
     }
   };
 
-  // セッションを破棄してログアウト状態に戻す
   const signOut = async () => {
     try {
       const { error } = await supabase.auth.signOut();
@@ -60,12 +57,11 @@ export function useAuth() {
       session.value = null;
       return { error: null };
     } catch (error) {
-      console.error('ログアウトエラー:', error);
+      console.error('ログアウトに失敗しました:', error);
       return { error };
     }
   };
 
-  // パスワードリセットメールを送信する
   const resetPassword = async (email) => {
     try {
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -75,12 +71,11 @@ export function useAuth() {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('パスワードリセットエラー:', error);
+      console.error('パスワードリセットに失敗しました:', error);
       return { data: null, error };
     }
   };
 
-  // ログイン中ユーザーのパスワードを変更する
   const updatePassword = async (newPassword) => {
     try {
       const { data, error } = await supabase.auth.updateUser({
@@ -90,16 +85,42 @@ export function useAuth() {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('パスワード更新エラー:', error);
+      console.error('パスワード更新に失敗しました:', error);
       return { data: null, error };
     }
   };
 
-  // users テーブル上のプロフィール情報を更新する
+  const ensureUserProfile = async (authUser) => {
+    try {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (!profile) {
+        const displayName =
+          authUser.user_metadata?.display_name ?? authUser.email?.split('@')[0] ?? '名無し';
+        const icon = authUser.user_metadata?.icon ?? DEFAULT_ICON;
+
+        const { error } = await supabase.from('users').insert({
+          id: authUser.id,
+          email: authUser.email,
+          display_name: displayName,
+          icon
+        });
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('プロフィール作成に失敗しました:', error);
+    }
+  };
+
   const updateProfile = async (displayName, icon, bio) => {
     try {
       if (!user.value) {
-        throw new Error('ログインしていません');
+        throw new Error('ログイン中のユーザーが見つかりません。');
       }
 
       const { data, error } = await supabase
@@ -117,39 +138,11 @@ export function useAuth() {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error('プロフィール更新エラー:', error);
+      console.error('プロフィール更新に失敗しました:', error);
       return { data: null, error };
     }
   };
 
-  // users テーブルにプロフィールがない場合は初期レコードを作成する
-  const ensureUserProfile = async (authUser) => {
-    try {
-      const { data: existingProfile } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', authUser.id)
-        .single();
-
-      if (!existingProfile) {
-        const displayName = authUser.user_metadata?.display_name || authUser.email.split('@')[0];
-        const icon = authUser.user_metadata?.icon || DEFAULT_ICON;
-
-        const { error } = await supabase.from('users').insert({
-          id: authUser.id,
-          email: authUser.email,
-          display_name: displayName,
-          icon
-        });
-
-        if (error) throw error;
-      }
-    } catch (error) {
-      console.error('プロフィール作成エラー:', error);
-    }
-  };
-
-  // アプリ起動時と認証状態の変化を監視して共通状態を更新する
   const initAuth = async () => {
     try {
       const {
@@ -163,7 +156,13 @@ export function useAuth() {
         await ensureUserProfile(user.value);
       }
 
-      supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
+
+      const {
+        data: { subscription }
+      } = supabase.auth.onAuthStateChange(async (event, newSession) => {
         session.value = newSession;
         user.value = newSession?.user ?? null;
 
@@ -171,8 +170,10 @@ export function useAuth() {
           await ensureUserProfile(user.value);
         }
       });
+
+      authSubscription = subscription;
     } catch (error) {
-      console.error('認証初期化エラー:', error);
+      console.error('認証初期化に失敗しました:', error);
     } finally {
       loading.value = false;
     }

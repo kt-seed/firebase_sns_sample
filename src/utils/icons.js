@@ -1,4 +1,4 @@
-// プロフィールアイコンとして利用できるプリセットの定義
+// プロフィールアイコンとして利用できるプリセット
 export const USER_ICONS = [
   { id: 'icon-cat', emoji: '🐱', name: '猫' },
   { id: 'icon-dog', emoji: '🐶', name: '犬' },
@@ -9,7 +9,7 @@ export const USER_ICONS = [
   { id: 'icon-tiger', emoji: '🐯', name: '虎' },
   { id: 'icon-lion', emoji: '🦁', name: 'ライオン' },
   { id: 'icon-monkey', emoji: '🐵', name: '猿' },
-  { id: 'icon-rabbit', emoji: '🐰', name: 'うさぎ' },
+  { id: 'icon-rabbit', emoji: '🐰', name: '兎' },
   { id: 'icon-mouse', emoji: '🐭', name: 'ねずみ' },
   { id: 'icon-hamster', emoji: '🐹', name: 'ハムスター' },
   { id: 'icon-bird', emoji: '🐦', name: '鳥' },
@@ -30,7 +30,7 @@ export function getIconEmoji(iconId) {
 }
 
 export function getIconById(iconId) {
-  return USER_ICONS.find((item) => item.id === iconId) || null;
+  return USER_ICONS.find((item) => item.id === iconId) ?? null;
 }
 
 export function getRandomIconId() {
