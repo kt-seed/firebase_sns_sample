@@ -37,29 +37,13 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
 
-  // 認証初期化が完了するまで待つ
-  if (authStore.loading) {
-    // loadingがfalseになるまで待機
-    const checkLoading = () => {
-      return new Promise((resolve) => {
-        const interval = setInterval(() => {
-          if (!authStore.loading) {
-            clearInterval(interval);
-            resolve();
-          }
-        }, 50);
-      });
-    };
-    await checkLoading();
-  }
+  await authStore.initAuth();
 
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
 
   if (requiresAuth && !authStore.isAuthenticated) {
-    // 認証が必要なページで未ログインの場合、ログインページへリダイレクト
     next('/login');
   } else if (to.path === '/login' && authStore.isAuthenticated) {
-    // ログイン済みの場合、ログインページへのアクセスをホームへリダイレクト
     next('/');
   } else {
     next();

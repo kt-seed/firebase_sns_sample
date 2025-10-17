@@ -8,6 +8,7 @@ const session = ref(null);
 const loading = ref(true);
 
 let authSubscription = null;
+let initPromise = null;
 
 export function useAuth() {
   const isAuthenticated = computed(() => !!user.value);
@@ -151,39 +152,54 @@ export function useAuth() {
   };
 
   const initAuth = async () => {
-    try {
-      const {
-        data: { session: currentSession }
-      } = await supabase.auth.getSession();
+    if (authSubscription) {
+      return;
+    }
 
-      session.value = currentSession;
-      user.value = currentSession?.user ?? null;
+    if (initPromise) {
+      return initPromise;
+    }
 
-      if (user.value) {
-        await ensureUserProfile(user.value);
-      }
+    loading.value = true;
 
-      if (authSubscription) {
-        authSubscription.unsubscribe();
-      }
+    initPromise = (async () => {
+      try {
+        const {
+          data: { session: currentSession }
+        } = await supabase.auth.getSession();
 
-      const {
-        data: { subscription }
-      } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-        session.value = newSession;
-        user.value = newSession?.user ?? null;
+        session.value = currentSession;
+        user.value = currentSession?.user ?? null;
 
-        if (event === 'SIGNED_IN' && user.value) {
+        if (user.value) {
           await ensureUserProfile(user.value);
         }
-      });
 
-      authSubscription = subscription;
-    } catch (error) {
-      console.error('認証初期化に失敗しました:', error);
-    } finally {
-      loading.value = false;
-    }
+        if (authSubscription) {
+          authSubscription.unsubscribe();
+        }
+
+        const {
+          data: { subscription }
+        } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+          session.value = newSession;
+          user.value = newSession?.user ?? null;
+
+          if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && user.value) {
+            await ensureUserProfile(user.value);
+          }
+        });
+
+        authSubscription = subscription;
+      } catch (error) {
+        console.error('認証初期化に失敗しました:', error);
+      } finally {
+        loading.value = false;
+        initPromise = null;
+      }
+    })();
+
+    return initPromise;
   };
 
   return {
