@@ -2,40 +2,32 @@ import { ref } from 'vue';
 
 // トースト通知をアプリ全体で共有するための状態
 const toasts = ref([]);
-let toastId = 0;
+let nextToastId = 0;
 
-// トースト表示ロジックをまとめた composable
 export function useToast() {
-  // メッセージをキューに積み、一定時間後に自動で消す
   const showToast = (message, type = 'info', duration = 3000) => {
-    const id = toastId++;
-    const toast = {
+    const id = nextToastId++;
+
+    toasts.value.push({
       id,
       message,
-      type,
-      visible: true
-    };
-
-    toasts.value.push(toast);
+      type
+    });
 
     if (duration > 0) {
-      setTimeout(() => {
-        removeToast(id);
-      }, duration);
+      window.setTimeout(() => removeToast(id), duration);
     }
 
     return id;
   };
 
-  // 指定 ID のトーストを即時に取り除く
   const removeToast = (id) => {
-    const index = toasts.value.findIndex((t) => t.id === id);
+    const index = toasts.value.findIndex((toast) => toast.id === id);
     if (index !== -1) {
       toasts.value.splice(index, 1);
     }
   };
 
-  // すべてのトーストをまとめてクリアする
   const clearAllToasts = () => {
     toasts.value = [];
   };

@@ -1,81 +1,170 @@
 import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 
-// 投稿タイムラインに関する CRUD とリアルタイム購読を提供する composable
+const PAGE_SIZE = 20;
+
 export function usePosts() {
   const posts = ref([]);
   const loading = ref(false);
+  const appending = ref(false);
   const error = ref(null);
+  const hasMore = ref(true);
 
-  // タイムライン投稿を最新順で取得する
-  const fetchTimeline = async (limit = 50) => {
+  const context = ref({
+    filter: 'all', // all | following
+    userId: null,
+    followingIds: []
+  });
+
+  const fetchFollowingIds = async (userId) => {
+    if (!userId) {
+      return [];
+    }
+
+    const { data, error: followError } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', userId);
+
+    if (followError) {
+      throw followError;
+    }
+
+    return data.map((row) => row.following_id);
+  };
+
+  const buildQuery = async (filter, userId, cursor, cachedFollowingIds = []) => {
+    let followingIds = cachedFollowingIds;
+
+    if (filter === 'following') {
+      if (!userId) {
+        return { query: null, followingIds: [] };
+      }
+
+      if (!followingIds.length) {
+        followingIds = await fetchFollowingIds(userId);
+      }
+
+      if (!followingIds.length) {
+        return { query: null, followingIds };
+      }
+    }
+
+    let query = supabase
+      .from('posts')
+      .select(
+        `
+        id,
+        user_id,
+        text,
+        created_at,
+        likes_count,
+        reposts_count,
+        users (
+          id,
+          display_name,
+          icon
+        )
+      `
+      )
+      .order('created_at', { ascending: false });
+
+    if (cursor) {
+      query = query.lt('created_at', cursor);
+    }
+
+    if (filter === 'following' && followingIds.length) {
+      query = query.in('user_id', followingIds);
+    }
+
+    return { query, followingIds };
+  };
+
+  const fetchTimeline = async ({ filter = 'all', userId = null } = {}) => {
     loading.value = true;
     error.value = null;
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('posts')
-        .select(
-          `
-          *,
-          users (
-            display_name,
-            icon
-          )
-        `
-        )
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      const { query, followingIds } = await buildQuery(filter, userId, null);
 
+      if (!query) {
+        posts.value = [];
+        hasMore.value = false;
+        context.value = { filter, userId, followingIds };
+        return { data: [], error: null };
+      }
+
+      const { data, error: fetchError } = await query.limit(PAGE_SIZE);
       if (fetchError) throw fetchError;
 
-      posts.value = data;
-      return { data, error: null };
+      posts.value = data ?? [];
+      hasMore.value = (data?.length ?? 0) === PAGE_SIZE;
+      context.value = { filter, userId, followingIds };
+
+      return { data: posts.value, error: null };
     } catch (err) {
-      console.error('タイムライン取得エラー:', err);
+      console.error('タイムライン取得に失敗しました:', err);
       error.value = err.message;
+      posts.value = [];
+      hasMore.value = false;
       return { data: null, error: err };
     } finally {
       loading.value = false;
     }
   };
 
-  // 特定ユーザーの投稿だけを取得する
-  const fetchUserPosts = async (userId) => {
-    loading.value = true;
+  const loadMore = async () => {
+    if (!hasMore.value || appending.value || posts.value.length === 0) {
+      return { data: [], error: null };
+    }
+
+    appending.value = true;
     error.value = null;
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('posts')
-        .select(
-          `
-          *,
-          users (
-            display_name,
-            icon
-          )
-        `
-        )
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+      const lastPost = posts.value[posts.value.length - 1];
+      const { filter, userId, followingIds } = context.value;
 
+      const { query, followingIds: nextFollowingIds } = await buildQuery(
+        filter,
+        userId,
+        lastPost.created_at,
+        followingIds
+      );
+
+      if (!query) {
+        hasMore.value = false;
+        context.value = { filter, userId, followingIds: nextFollowingIds };
+        return { data: [], error: null };
+      }
+
+      const { data, error: fetchError } = await query.limit(PAGE_SIZE);
       if (fetchError) throw fetchError;
 
-      return { data, error: null };
+      if (data?.length) {
+        posts.value.push(...data);
+      }
+
+      if (!data || data.length < PAGE_SIZE) {
+        hasMore.value = false;
+      }
+
+      context.value = { filter, userId, followingIds: nextFollowingIds };
+
+      return { data: data ?? [], error: null };
     } catch (err) {
-      console.error('ユーザー投稿取得エラー:', err);
+      console.error('投稿の追加取得に失敗しました:', err);
       error.value = err.message;
       return { data: null, error: err };
     } finally {
-      loading.value = false;
+      appending.value = false;
     }
   };
 
-  // 新規投稿を作成し、ローカルタイムラインにも即時反映する
   const createPost = async (text, userId) => {
-    loading.value = true;
-    error.value = null;
+    if (!userId) {
+      return { data: null, error: new Error('ユーザーが認証されていません。') };
+    }
 
     try {
       const { data, error: insertError } = await supabase
@@ -86,8 +175,14 @@ export function usePosts() {
         })
         .select(
           `
-          *,
+          id,
+          user_id,
+          text,
+          created_at,
+          likes_count,
+          reposts_count,
           users (
+            id,
             display_name,
             icon
           )
@@ -98,43 +193,29 @@ export function usePosts() {
       if (insertError) throw insertError;
 
       posts.value.unshift(data);
-
       return { data, error: null };
     } catch (err) {
-      console.error('投稿作成エラー:', err);
-      error.value = err.message;
+      console.error('投稿の作成に失敗しました:', err);
       return { data: null, error: err };
-    } finally {
-      loading.value = false;
     }
   };
 
-  // 投稿を削除し、ローカルキャッシュからも取り除く
   const deletePost = async (postId) => {
-    loading.value = true;
-    error.value = null;
-
     try {
       const { error: deleteError } = await supabase.from('posts').delete().eq('id', postId);
-
       if (deleteError) throw deleteError;
 
       posts.value = posts.value.filter((post) => post.id !== postId);
-
       return { error: null };
     } catch (err) {
-      console.error('投稿削除エラー:', err);
-      error.value = err.message;
+      console.error('投稿の削除に失敗しました:', err);
       return { error: err };
-    } finally {
-      loading.value = false;
     }
   };
 
-  // 投稿テーブルの INSERT / DELETE を購読し、ローカル状態をリアルタイム更新する
-  const subscribeToTimeline = () => {
+  const subscribeToTimeline = ({ filter = 'all', userId = null } = {}) => {
     const channel = supabase
-      .channel('timeline-posts')
+      .channel(`timeline-${filter}-${userId ?? 'guest'}`)
       .on(
         'postgres_changes',
         {
@@ -143,12 +224,25 @@ export function usePosts() {
           table: 'posts'
         },
         async (payload) => {
+          if (filter === 'following') {
+            const targetIds = context.value.followingIds;
+            if (!targetIds.includes(payload.new.user_id)) {
+              return;
+            }
+          }
+
           const { data } = await supabase
             .from('posts')
             .select(
               `
-              *,
+              id,
+              user_id,
+              text,
+              created_at,
+              likes_count,
+              reposts_count,
               users (
+                id,
                 display_name,
                 icon
               )
@@ -175,7 +269,6 @@ export function usePosts() {
       )
       .subscribe();
 
-    // 呼び出し側でチャンネル破棄できるようクリーンアップ関数を返す
     return () => {
       supabase.removeChannel(channel);
     };
@@ -184,9 +277,11 @@ export function usePosts() {
   return {
     posts,
     loading,
+    appending,
     error,
+    hasMore,
     fetchTimeline,
-    fetchUserPosts,
+    loadMore,
     createPost,
     deletePost,
     subscribeToTimeline

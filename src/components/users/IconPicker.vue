@@ -11,13 +11,12 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-// 現在選択されているアイコン ID を内部状態として保持する
 const selectedIcon = ref(props.modelValue);
 
 watch(
   () => props.modelValue,
-  (value) => {
-    selectedIcon.value = value;
+  (next) => {
+    selectedIcon.value = next;
   }
 );
 
@@ -34,18 +33,14 @@ const currentIconEmoji = computed(() => getIconEmoji(selectedIcon.value));
 <template>
   <div class="icon-picker">
     <div class="mb-4">
-      <label class="block text-sm font-medium text-gray-700 mb-2">
-        プロフィールアイコン
-      </label>
+      <p class="text-sm font-medium text-gray-700 mb-2">プロフィールアイコン</p>
       <div class="flex items-center gap-3">
-        <div
-          class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-4xl border-2 border-gray-300"
-        >
+        <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-4xl border-2 border-gray-200">
           {{ currentIconEmoji }}
         </div>
-        <div class="text-sm text-gray-600">
+        <div class="text-sm text-gray-600 leading-snug">
           <p>現在のアイコン</p>
-          <p class="text-xs text-gray-500">クリックして変更できます</p>
+          <p class="text-xs text-gray-500">お好みのアイコンをクリックして選択できます。</p>
         </div>
       </div>
     </div>
@@ -55,15 +50,14 @@ const currentIconEmoji = computed(() => getIconEmoji(selectedIcon.value));
         v-for="icon in USER_ICONS"
         :key="icon.id"
         type="button"
+        :title="icon.name"
         :class="[
-          'w-14 h-14 rounded-full text-3xl transition-all duration-200',
-          'hover:scale-110 hover:shadow-md',
-          'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
+          'w-14 h-14 rounded-full text-3xl transition transform',
+          'hover:scale-110 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
           isSelected(icon.id)
             ? 'bg-blue-100 border-2 border-blue-500 scale-105 shadow-md'
             : 'bg-gray-100 border-2 border-transparent hover:border-gray-300'
         ]"
-        :title="icon.name"
         @click="selectIcon(icon.id)"
       >
         {{ icon.emoji }}
@@ -71,7 +65,7 @@ const currentIconEmoji = computed(() => getIconEmoji(selectedIcon.value));
     </div>
 
     <p class="mt-3 text-xs text-gray-500 text-center">
-      20種類のアイコンから選べます
+      20種類のアイコンから選べます。
     </p>
   </div>
 </template>
@@ -81,5 +75,6 @@ const currentIconEmoji = computed(() => getIconEmoji(selectedIcon.value));
   padding: 1rem;
   background-color: #ffffff;
   border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
 }
 </style>

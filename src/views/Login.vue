@@ -1,5 +1,5 @@
 <script setup>
-// ログイン画面で認証フォームを包むコンテナ
+// 認証フォームを表示するシンプルなラッパー
 import LoginForm from '@/components/auth/LoginForm.vue';
 </script>
 

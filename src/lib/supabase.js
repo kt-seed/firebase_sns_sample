@@ -9,7 +9,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Supabase クライアントをアプリ全体で共有する
+// Supabaseクライアントをアプリ全体で共有する
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   auth: {
     autoRefreshToken: true,
@@ -18,7 +18,7 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   }
 });
 
-// テーブル名の定数をまとめて管理する
+// テーブル名を定数にまとめて管理する
 export const TABLES = {
   USERS: 'users',
   POSTS: 'posts',

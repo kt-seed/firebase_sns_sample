@@ -1,10 +1,18 @@
+<script setup>
+import Header from '@/components/common/Header.vue';
+import PostForm from '@/components/posts/PostForm.vue';
+import Timeline from '@/components/posts/Timeline.vue';
+</script>
+
 <template>
-  <div class="container mx-auto px-4 py-8">
-    <h1 class="text-2xl font-semibold text-slate-800 mb-4">ホーム</h1>
-    <p class="text-slate-500">タイムライン機能は現在実装中です。</p>
+  <div class="min-h-screen bg-slate-100">
+    <Header />
+
+    <main class="container mx-auto max-w-4xl px-4 py-8">
+      <section class="space-y-6">
+        <PostForm />
+        <Timeline />
+      </section>
+    </main>
   </div>
 </template>
-
-<script setup>
-// タイムライン画面のプレースホルダー
-</script>
